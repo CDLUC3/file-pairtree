@@ -1,0 +1,8 @@
+java.lang.NoClassDefFoundError
+	at java.lang.Class.forName0(Native Method)
+	at java.lang.Class.forName(Class.java:141)
+	at java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment(GraphicsEnvironment.java:62)
+	at java.awt.Font.initializeFont(Font.java:308)
+	at java.awt.Font.<init>(Font.java:344)
+	at COM.ibm.storage.adsm.framework.nls.DFcgNLS.setUnicodeFont(DFcgNLS.java:627)
+	at COM.ibm.storage.adsm.cadmin.clientgui.DDsmApplet.main(DDsmApplet.java:750)

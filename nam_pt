@@ -1,0 +1,223 @@
+#!/usr/bin/perl -Ilib
+
+use strict;
+use warnings;
+
+my $VERSION;
+$VERSION = sprintf "%d.%02d", q$Revision: 0.11 $ =~ /(\d+)/g;
+
+# nam - get and set Namaste tags
+#
+# Do "perl nam --man" for description.
+
+use Getopt::Long qw(:config bundling_override);
+use Pod::Usage;
+
+use File::Namaste;
+use File::Value;
+use File::ANVL;
+
+my %opt = (
+	help		=> 0,
+	man		=> 0,
+	version		=> 0,
+	directory	=> 0,
+	format		=> 0,
+	verbose		=> 0,
+);
+
+my $format = FMT_PLAIN;		# default
+
+# main
+{
+	GetOptions(\%opt,
+		'help|?',
+		'man',
+		'version',
+		'format|m=s',		# one of plain, anvl, xml
+		'directory|d=s',
+		'verbose|v',
+	) or pod2usage(1);
+
+	pod2usage(1)
+		if $opt{help};
+	pod2usage(-exitstatus => 0, -verbose => 2)
+		if $opt{man};
+	print "$VERSION\n" and exit(0)
+		if $opt{version};
+	@ARGV > 0 or
+		pod2usage("$0: not enough arguments");
+
+	if ($opt{directory}) {
+		chdir($opt{directory}) or
+			pod2usage("$opt{directory}: $!");
+	}
+	if ($opt{format}) {
+		if    ($opt{format} eq "anvl")	{ $format = FMT_ANVL; }
+		elsif ($opt{format} eq "xml")	{ $format = FMT_XML; }
+		elsif ($opt{format} eq "plain")	{ $format = FMT_PLAIN; }
+		else {
+		  pod2usage("$0: $opt{format}: unrecognized format argument");
+		}
+	}
+
+	my $cmd = lc(shift @ARGV);
+	my ($num, $fname, $fvalue, $msg, @nnv);
+	my $delete = 0;
+
+	if ($cmd eq "add") {	# easiest, since don't need to check existence
+		@ARGV > 1 or
+			pod2usage("$cmd: needs at least two arguments");
+		($msg = set_namaste(@ARGV))
+			and die($msg);
+			# XXXXX Carp?
+		exit 0;
+	}
+
+	if (($delete = $cmd eq "del") || $cmd eq "set") {
+
+		pod2usage("$cmd what? (more arguments needed)")
+			if (@ARGV == 0);
+
+		# same args for command as for get_namaste()
+		@nnv = ($delete ? get_namaste(@ARGV)	# delete all args or
+			: get_namaste($ARGV[0]));	# just 1st for "set"
+		# @nnv may contain multiple tags (even for "set") to delete
+
+		while (defined($num = shift(@nnv))) {
+			$fname = shift(@nnv);
+			$fvalue = shift(@nnv);
+			unlink($fname) or
+				print STDERR "$fname: $!";
+
+			# XXXXX map nums to kernel tags (1->who, etc)
+			#     different kinds of output, eg, XML
+			#om($format, DATA, num2dk($num), $fvalue);
+			#$opt{verbose} and
+			#	om($format, NOTE, "file", $fname);
+		}
+		if (! $delete) {			# "set" case
+			($msg = set_namaste(@ARGV))
+				and die($msg);
+				# XXXXX Carp?
+		}
+		exit 0;
+	}
+
+	if (($delete = $cmd eq "delall") || $cmd eq "get") {
+
+		# same args for command as for get_namaste()
+		@nnv = get_namaste(@ARGV);
+		while (defined($num = shift(@nnv))) {
+			$fname = shift(@nnv);
+			$fvalue = shift(@nnv);
+			if ($delete) {		# we're doing a delete
+				unlink($fname) or
+					print STDERR "$fname: $!";
+				next;
+			}
+			# XXXXX map nums to kernel tags (1->who, etc)
+			#     different kinds of output, eg, XML
+			om($format, DATA, num2dk($num), $fvalue);
+			$opt{verbose} and
+				om($format, NOTE, "file", $fname);
+		}
+		exit 0;
+	}
+	pod2usage("$cmd: unrecognized command");
+}
+
+__END__
+
+=pod
+
+=for roff
+.nr PS 12p
+.nr VS 14.4p
+
+=head1 NAME
+
+nam - set, get, and delete Namaste tag files
+
+=head1 SYNOPSIS
+
+=over
+
+=item B<nam> [B<-vh>] [B<-m> I<fmt>] [B<-d> I<dir>] B<set|add> I<integer> I<string> [[I<maxlen>] I<ellipsis>]
+
+=item B<nam> [B<-vh>] [B<-m> I<fmt>] [B<-d> I<dir>] B<get|del> [I<integer> ...]
+
+=item B<nam> [B<-vh>] [B<-m> I<fmt>] [B<-d> I<dir>] B<delall>
+
+=back
+
+=head1 DESCRIPTION
+
+The B<nam> command manages Namaste tag files.  A Namaste (Name-as-text)
+tag file holds a single metadata value and its filename is derived from
+the metadata value.
+
+=head1 OPTIONS
+
+=over
+
+=item B<-d>, B<--directory>
+
+Use I<directory> instead of the current directory to look for tag files.
+
+=item B<-m>, B<--format>
+
+Output in format I<fmt>, one of C<plain> (unlabeled),
+C<anvl>, or C<xml>.  Default format is C<plain>.
+
+=item B<-v>, B<--verbose>
+
+Output ancillary information (the tag filename itself) as a comment.
+
+=item B<-h>, B<--help>
+
+Print extended help documentation.
+
+=item B<--man>
+
+Print full documentation.
+
+=item B<--version>
+
+Print the current version number and exit.
+
+=back
+
+=head1 EXAMPLES
+
+  nam set 0 bagit_0.98
+  nam set 1 'Mark Twain'
+  nam set 2 'Adventures of Huckleberry Finn' 13m
+  nam get
+  nam delall
+
+=head1 SEE ALSO
+
+rm(1)
+
+=head1 AUTHOR
+
+John Kunze I<jak at ucop dot edu>
+
+=head1 COPYRIGHT
+
+  Copyright 2009 UC Regents.  Open source Apache License, Version 2.
+
+=begin CPAN
+
+=head1 README
+
+Manage Namaste tag files.
+
+=head1 SCRIPT CATEGORIES
+
+=end CPAN
+
+=cut
+
+#  LocalWords:  LocalWords Getopt GetOptions ARGV 

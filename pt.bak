@@ -1,0 +1,454 @@
+#!/usr/bin/perl -w -Ilib
+
+# XXX add to spec: two ways that a pairpath ends: 1) the form of the
+# ppath (ie, ends in a morty) and 2) you run "aground" smack into
+# a "longy" ("thingy") or a file
+
+# xxx other stats to gather: total dir count, total count of all things
+# that aren't either reg files or dirs; plus max and averages for all
+# things like depth of ppaths (ids), depth of objects, sizes of objects,
+# fanout; same numbers for "pairtree.*" branches
+
+use strict;
+use File::Find;
+use File::Pairtree qw( $pair $pairp1 $pairm1 );
+
+my $R = $File::Pairtree::root;
+
+# Set up a big "find" expression that depends on these features of GNU find:
+#   -regex for high-functioning, wholepath matching
+#   -printf to tag files/dirs found with certain characteristics
+#
+# The basic idea is to walk a given hierarchy and tag stuff that looks
+# like an object.  Mainstream objects are encapsulated in directory names
+# of three characters or more, but we still have to detect the edge cases.
+# All candidate object cases are printed on a line with the pairpath
+# (ppath) first (as primary sort field), the tagged case, and the file/dir
+# name found at the end of the ppath.
+#
+# XXXXXXXX better tags needed
+#	NS=Non-Shorty directory (normal object)
+#	UF=Unencapsulated File (encaps. warning),
+#	PM=Post-Morty Shorty or Morty encountered (encaps. warning)
+#	UG=Unencapsulated Group (encaps. warning)
+#       EP=Empty Pairpath (indicator)
+#
+# The output of the 'find' is sorted (important) so that leaves descending
+# from a given ppath cluster in groups.  The resulting groups are used to
+# figure out how best to detect and repair any encapsulation problems.
+# We offer xxx to repair encapsulation problems because they're non-trivial
+# to detect (ie, there will be pairtree walkers that don't detect them) and
+# we want to encourage proper encapsulation for the sake of interoperability.
+#
+# One odd case is an object right at the root of a pairtree, which means
+# an empty path, hence an empty identifier.  Because systems frequently
+# reserve special meaning for an empty or root value, and they/we might
+# want to put something at that special location (eg, an object describing
+# the pairtree), we will detect and count it as an object; its meaning and
+# (il)legality is up to the implementor.  This has the nice side-effect
+# that we'll have no fatal errors in processing a pairtree.
+#
+# XXX do edge case of pairtree_root/foo.txt
+# XXX what to do with symlinks? and unusual filenames?
+
+# Set $verbosefind to '-print' to show everything that 'find' handles,
+# but normally don't show by setting it to '-true'.
+my $verbosefind='-print';
+#my $verbosefind = '-true';
+
+# Normally prune for speed.  Set $verbosefind='-print' and noprune='-true'
+# to see what processing steps would happen if you don't prune. xxx
+my $noprune='-true';
+#my $noprune = '-prune';
+
+# This matches the base ppath in 'find'.
+my $PP = '\([^/][^/]/\)*[^/][^/]?';
+
+# This matches the base ppath in 'perl'.
+my $P = "([^/]{$pair}/)*[^/]{1,$pair}";
+
+my $tree = $ARGV[0];
+
+
+my $irregularcount = 0;		# non file, non dir fs items to report xxx
+my ($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $sze);
+
+my $in_object = 0;
+
+sub prenode{
+
+	return () if (scalar(@_) == 0);		# no work if no items
+	return @_ if ($in_object);		# no-op if inside object
+	my @ground = ();
+	my @objdirs = ();
+	for (@_) {
+		($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $sze)
+			= stat($_);
+		#if (m@^[^/]{$pairp1,}@ || S_ISREG($mode)) {	# xxx efficiency?
+		if (m@^[^/]{$pairp1,}@ || -f $_) {
+			push(@ground, $_);
+		}
+		elsif (-d $_)  {
+			push(@objdirs, $_);
+		}
+		else {		# nothing else will be processed
+			$irregularcount++;
+		}
+	}
+	print("Ground files: ", join(", ", @ground), "\n")
+		if (scalar(@ground) > 0);
+	push @ground, sort(@objdirs);
+	return @ground;
+}
+
+my $wpname = '';		# whole pathname
+my $tpname = '';		# tail of name
+my $cdname = '';		# current directory name
+
+my %curobj = ( 'ppath' => '', 'encaperr' => 0, 'octets' => 0, 'streams' => 0 );
+
+find({ wanted => \&donode, preprocess => \&prenode, postprocess => \&postnode },
+	$tree);
+
+sub donode{
+
+	$cdname = $File::Find::dir;		# current directory name
+	$tpname = $_;				# current filename in that dir
+	$_ = $wpname = $File::Find::name;	# complete pathname to file
+	($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $sze) = stat($tpname);
+	if (-f $tpname) {
+		if (m@^.*$R/(.*/)?pairtree.*$@) {
+		#	-prune
+		}
+		elsif (m@^.*$R/$P/[^/]+$@) {
+			#print "m@.*$R/$P/[^/]+@: $_\n";
+		 	print "$cdname UF $tpname\n";
+		#	-fprintf $altout 'UF %h %s\n'
+		}
+		else {
+			$curobj{'octets'} += $sze;
+			print "sssss $curobj{'octets'}\n";
+			$curobj{'streams'}++;
+		#	-fprintf $altout 'IN %p %s\n'
+		#	$noprune
+		}
+	}
+	elsif (-d $tpname) {
+		if (m@^.*$R/(.*/)?pairtree.*$@) {
+		#	-prune
+		}
+		# XXX add re qualifier so Perl knows re's not changing
+		elsif (m@^.*$R/($P/)?[^/]{$pairp1,}$@) {
+			# start new object; but end previous object first
+			# form: ppath, EncapErr, octets, streams
+			newptobj($cdname, 0, 0, 0);
+			print "$cdname NS $tpname\n";
+			#	-fprintf $altout 'START %h 0\n'
+			#	$noprune
+		}
+		elsif (m@^.*$R/$P$@) {
+			#	-empty
+			#	-printf '%p EP -\n'
+		}
+		# $pair, $pairm1, $pairp1
+		elsif (m@^.*$R/([^/]{$pair}/)*[^/]{1,$pairm1}/[^/]{1,$pair}$@) {
+			print "$cdname PM $tpname\n";
+			#	-fprintf $altout 'START %h 0\n'
+			#	$noprune
+		}
+	}
+	else {
+		$irregularcount++;
+	}
+}
+
+sub postnode{
+	return;
+}
+
+sub newptobj{ my( $ppath, $encaperr, $octets, $streams )=@_;
+
+	if ($curobj{'ppath'}) {		# print record of previous obj
+		print "id: $curobj{'ppath'}, $curobj{'encaperr'}, $curobj{'octets'}.$curobj{'streams'}\n";
+	}
+	die("newptobj: all args must be defined")
+		unless (defined($ppath) && defined($encaperr)
+			&& defined($octets) && defined($streams));
+	$curobj{'ppath'} = $ppath;
+	$curobj{'encaperr'} = $encaperr;
+	$curobj{'octets'} = $octets;
+	$curobj{'streams'} = $streams;
+}
+
+exit(0);
+
+# /dev/stderr seems to be the only file name you can give to the fprintf
+# action of 'find' so output from different clauses will be correctly
+# interleaved.  We assume that stderr will be closed and all output
+# flushed by the time the sort is finished, so when later we read
+# both outputs, we won't get ahead of things. xxx say this better
+#
+my $altout = '/dev/stderr';
+
+# Test for .*$R/(.*/)?pairtree.* must occur early.
+#
+# xxx report null: for pairtree.* case? and possibly size?
+my $findexpr = qq@$verbosefind , \\
+	-regex ".*$R/\\(.*/\\)?pairtree.*" \\
+		-prune \\
+	-o \\
+	-type d \\
+		-regex ".*$R/\\($PP/\\)?[^/][^/][^/]+" \\
+		-printf '%h NS %f\\n' \\
+		-fprintf $altout 'START %h 0\\n' \\
+		$noprune \\
+	-o \\
+	-type d \\
+		-regex ".*$R/$PP" \\
+		-empty \\
+		-printf '%p EP -\\n' \\
+	-o \\
+	-type f \\
+		-regex ".*$R/$PP/[^/]+" \\
+		-printf '%h UF %f\\n' \\
+		-fprintf $altout 'UF %h %s\\n' \\
+	-o \\
+	-type d \\
+		-regex ".*$R/\\([^/][^/]/\\)*[^/]/[^/][^/]?" \\
+		-printf '%h PM %f\\n' \\
+		-fprintf $altout 'START %h 0\\n' \\
+		$noprune \\
+	-o \\
+	-type f \\
+		-fprintf $altout 'IN %p %s\\n' \\
+		$noprune \\
+@;
+
+#$| = 1;		# XXXX unbuffer output   
+
+#XXXXX yuck.  I may not be able to size improperly unencapsulated files
+#  with 'find'
+
+# The -type f test to get filesizes should occur after the UF file test
+# XXX move up to first test? for efficiency?
+
+#print "findexpr=$findexpr\n";
+
+# xxx change pt_z to a mktemp, in case two scans are going at once
+my $szfile = 'pt_z';
+
+open(FIND, "find $tree $findexpr 2>$szfile | sort |")
+	|| die("can't start find");
+
+open(SIZES, "< $szfile") || die("can't open size file");
+
+my $defsize = '(:unas)';		# xxx needed?
+my ($sztype, $which, $size) = ('', '', 0);
+my ($ptbcount, $ptfcount) = (0, 0);
+
+sub getsizeline{
+	$_ = <SIZES>;
+	die("Error: unexpected size line format: $_")
+		if (! /^(\S+) (\S+) (.*)/);
+	return ($1, $2, $3);		# $sztype, $which, $size
+}
+
+sub getsize{ my( $ppath )=@_;
+
+	my ($ppbcount, $ppfcount);
+
+	# Much depends on the assumption that we're called
+	# with a ppath that we are "at" in the sizes file due to
+	# lookahead.  We initialize late (first call), since no input
+	# will be ready for a while.  With luck the input stream will
+	# be completely defined by the time we ask for the first line.
+	# The line should be of type START or UF; lines of type IN we
+	# should have read through until we encounter a line not of
+	# type IN (always preceded by START).
+	#
+	if (! $sztype) {		# lazy initialization step
+		($sztype, $which, $size) = getsizeline();
+	}
+
+	# Check that the $ppath we're called with matches the current
+	# size line.  The check depends on the $sztype.  Remember:
+	#	START %h 0	(for types NS and PM)
+	#	UF %h %s	(our $ppath _is_ %h)
+	#	IN %p %s	(our $ppath is contained in %p)
+	# UF can be followed by START at same level (UG)
+	# START can be followed by START at same level (UG)
+	# xxx all these string comparisons... more efficient with ints?
+	die("unexpected size line type: $sztype")
+		unless ($sztype eq "START" || $sztype eq "UF");
+	die("didn't find $ppath in triple: $sztype, $which, $size")
+		if ($which ne $ppath);
+	$ppbcount = $size;		# initialize
+	$ppfcount = ($sztype eq "UF" ? 1 : 0);
+	while (1) {
+		($sztype, $which, $size) = getsizeline();
+
+		if ($sztype eq "IN" && $which =~ /^$ppath/) {
+			$ppbcount += $size;
+		}
+		elsif ($sztype eq "START") {
+			last if ($which ne $ppath);
+		}
+		elsif ($sztype eq "UF") {
+			last if ($which ne $ppath);
+			$ppbcount += $size;
+		}
+		else {
+			die("unexpected triple in size run for $ppath: "
+				. "$sztype, $which, $size");
+		}
+		$ppfcount++;		# another file counted
+	}
+
+	# If we're here, we have total size for the given $ppath.
+	# Before returning, update the overall byte and file counts
+	# for the pairtree.
+	#
+	$ptbcount += $ppbcount;
+	$ptfcount += $ppfcount;
+
+	return "$ppbcount.$ppfcount";
+
+	# xxxx
+	#    find $f -type f | sed "s/.*/'&'/" | xargs stat -t | \
+	#        awk -v f=$f '{s += $2} END {printf "%s.%s %s\n", s, NR, f}'
+}
+
+# xxx get the path right for this file
+open(FIX, "> pt_fix") || warn("xxx can't open fix file");
+
+my ($pp, $found, $type, $object);
+$pp = $found = $type = $object = '';
+my ($prevpp, $prevfound, $prevtype);
+my $done = 0;
+my $encaperrs = 0;
+my $encapoks = 0;
+my $emptyppaths = 0;
+my $sizestr = '(:unas)';
+my $msg = '';
+my $verbose = 0;
+
+# Process the 'find' output lines for objects and look for anomalies.
+# Can't conclude about unencapsulated objects until we're past the
+# object (this requires sort to cluster candidate objects), which means
+# that we always know what the previous line and current line have on them.
+#
+while (1) {
+	$prevpp = $pp;
+	$prevfound = $found;
+	$prevtype = $type;
+
+	$_ = <FIND>;
+	if (defined($_)) {
+		chomp;
+		if (! /^(\S+) (\S+) (.*)/) {
+			# a "show all" line; pass thru
+			#print "xxx: $_\n";
+			next;
+		}
+		($pp, $type, $found) = ($1, $2, $3);
+		print "Verbose: $_\n" if ($verbose);
+		if ($type eq "EP") {
+			# This is the only type of "found" item that doesn't
+			# correspond to an object, so we can deal with it
+			# without waiting for the next line to tell us what
+			# it is.  We still have to fall through for the
+			# sake of what encountering this item means for our
+			# deduction about previous line's role, ie, we can't
+			# just short cut to the next iteration with 'next;'
+			#
+			print "null: $pp\n";
+			print FIX "null: $pp\n";
+			$emptyppaths++;
+		}
+	}
+	else {		# EOF reached -- this will be last time thru loop
+		# When EOF is found, want $pp empty for one last run through
+		# loop in order to properly eject final line.
+		$pp = '';	# want $pp empty for last run
+		$_ = '';	# want $_ defined in case of debug print
+		$done = 1;
+	}
+
+	# Report is one-line per object.  Line format is one of two types
+	# ok: id|filename|size|path
+	# warn: id|something|size|path|message
+
+	# This is the main part of the loop.  Normally, there would be
+	# one line per object, but in the presence of encapsulation errors
+	# there will be more than one line having the same ppath.  Because
+	# the input was sorted first, we know that any such lines will be
+	# clustered in a group, and all we have to do is detect when we
+	# enter a group (sharing a ppath) and leave a group.  We do this
+	# by processing the current line while remembering the previous
+	# line.  There are two states: "in object" ($object ne '') or not
+	# "in object" ($object eq '').
+	#
+	if ($object) {				# if "in object"
+		if ($pp eq $prevpp) {		#    and ppath is same
+			# stay "in object" and add to existing object
+			$object .= " $found";
+		}
+		else {				# else leave object
+			# dump and zero out object in preparation for another
+			# xxx write fixit script to create temp dir, move
+			# stuff into it, then rename to 'obj'
+			$sizestr = getsize($prevpp);
+			$msg = "warn: " . ppath2id($prevpp) .
+				" | UG $object | " .
+				$sizestr . " | $prevpp | " . 
+				"unencapsulated file/dir group\n";
+			print $msg;
+			print FIX $msg;
+			$object = "";
+			$encaperrs++;
+		}
+	}
+	else {					# if not "in object"
+		#print "pp=$pp, prevpp=$prevpp, $_\n";
+		if ($pp eq $prevpp) {		#    and ppath is same
+			# then start new object
+			$object = "$prevfound $found";
+		}
+		# else not entering an object; check UF and PM cases
+		elsif ($prevtype eq "UF" || $prevtype eq "PM") {
+			# offer to encapusulate a lone file
+			$sizestr = getsize($prevpp);
+			$msg = "warn: " . ppath2id($prevpp) .
+				" | $prevtype $prevfound | " .
+				$sizestr . " | $prevpp | " .
+				($prevtype eq "UF" ? "unencapsulated file" :
+				    "encapsulating directory name too short")
+				. "\n";
+			print $msg;
+			print FIX $msg;
+			$encaperrs++;
+		}
+		# else in mainstream case, except line 1 ($prevtype eq '')
+		# XXX explain why EP needs to run through and can't
+		# short cut "next" the loop
+		elsif ($prevtype && $prevtype ne "EP") {
+			$sizestr = getsize($prevpp);
+			print "ok: ", ppath2id($prevpp), " | $prevfound | ",
+				$sizestr, " | $prevpp\n";
+			$encapoks++;
+		}
+	}
+	last
+		if ($done);
+}
+
+close(FIND);
+close(FIX);
+close(SIZES);
+
+my $objcount = $encapoks + $encaperrs;
+
+print "$objcount objects, including $encaperrs encapsulation warnings.  ";
+print "There are $emptyppaths empty pairpaths\n";
+
+# XXXX make sure to declare/catch /be/nt/o/r/ as improper encapsulation

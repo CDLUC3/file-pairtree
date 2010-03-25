@@ -1,0 +1,15 @@
+null: t/pairtree_root/aa/ee
+warn: aab | PM c | 0.0 | t/pairtree_root/aa/b | encapsulating directory name too short
+null: t/pairtree_root/aa/ef
+null: t/pairtree_root/aa/eg
+null: t/pairtree_root/aa/eh
+null: t/pairtree_root/ab/ee
+warn: abefii | UF x | 0.1 | t/pairtree_root/ab/ef/ii | unencapsulated file
+warn: abefij | UF xy | 0.1 | t/pairtree_root/ab/ef/ij | unencapsulated file
+warn: abefik | UF xyz | 0.1 | t/pairtree_root/ab/ef/ik | unencapsulated file
+warn: ab | UG x y z | 0.3 | t/pairtree_root/ab | unencapsulated file/dir group
+null: t/pairtree_root/ad/ee
+null: t/pairtree_root/ad/ef
+null: t/pairtree_root/ad/eg
+null: t/pairtree_root/ad/eh
+warn: ad | UG abc xxx.txt | 29.2 | t/pairtree_root/ad | unencapsulated file/dir group

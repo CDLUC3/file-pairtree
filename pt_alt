@@ -1,0 +1,318 @@
+#!/usr/bin/perl -Tw -Ilib -I../lib
+#
+# pt - pairtree operations to add, del, scan
+#
+# Author:  John A. Kunze, jak@ucop.edu, California Digital Library
+
+# ---------
+# Copyright 2008 Regents of the University of California
+# 
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain a
+# copy of the License at
+# 
+#         http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License. 
+# ---------
+
+use Pairtree;
+use strict;
+
+# xxx noid op vs noidb base op ?
+# Usage:  pt op id
+# Usage:  ptb base get id
+# Usage:  ptb base get id
+# Usage:  ptb base add id obj ...
+# Usage:  ptb base del id obj ...	# options to unroll empty dirs
+# Usage:  ptb base scan			# create catalog of contents
+
+#my $x;
+#$x = id2ppath("ab/cd*ef/"); print "x=$x\n";
+#$x = id2pairpath("ab/cd*ef/", "\\"); print "x=$x\n";
+#$x = ppath2id('/pairtree_root/ab/=d/,e/abcde');
+#print "x=$x\n";
+#$x = ppath2id('/pairtree_root/ab/efgh/cd/de/abcde');
+#print "x=$x\n";
+
+use Text::ParseWords;
+use Getopt::Long;
+
+my $root = "pairtree_root";
+my $web = 0;
+my ($base, $debug, $ver, $help, $contact, $bulkcmd);
+my (@valid_helptopics, %info);		# purposely undefined for now
+my @valid_commands = qw(
+	add del hello help scan
+);
+
+# main
+{
+	my $line;
+	if ($0 =~ m|ptu[^/]*$|) {	# if called with the URL interface
+		$web = 1;			# orient output for HTTP
+		print "Content-Type: text/plain\n\n";
+		open(STDERR, ">&STDOUT")
+			or die("Can't combine stderr and stdout: $!\n");
+		! defined($ENV{'QUERY_STRING'}) and
+			die("No QUERY_STRING (hence no command) defined.\n");
+		($line = $ENV{'QUERY_STRING'}) =~ tr/+/ /;
+		@ARGV = shellwords($line);
+		#print "ARGV: " . join("|", @ARGV) . "\n";
+	}
+	if ($0 =~ m|ptr[^/]*$|) {	# if called for RewriteMap resolving,
+					# see Apache Rewrite mod documentation
+		$| = 1;		# very important to unbuffer the output
+		$bulkcmd = 1;
+		# yyy should we set a timeout to prevent hanging the server?
+	}
+
+	if (! ($contact = who_are_you($web))) {
+		print STDERR "Can't tell who you are: $!\n";
+		exit(1);
+	}
+
+	if (! GetOptions(
+		'debug'		=> \$debug,	# flag
+		'f=s'		=> \$base,	# filesystem directory name
+		'version'	=> \$ver,	# flag
+		'help'		=> \$help,	# flag
+	)) {
+		print "error: GetOptions\n";
+		usage(1, 1, "intro");
+		exit(1);
+	}
+	$web && $debug and
+		print "contact=$contact, pwd=", `pwd`;
+
+	# Handle -v or -h, and exit early.
+	if ($ver) {
+		# We take our version number from the Pairtree module version.
+		print qq@This is "pairtree" version $Pairtree::VERSION.\n@;
+		exit(0);
+	}
+	if ($help) {
+		# yyy should we encode help output?   print "help:\n";
+		usage(0, 0, "intro");
+		exit(0);
+	}
+
+	# Bulk command mode is signified by a single final argument of "-".
+	# If we're _not_ in bulk command mode, expect a single command
+	# represented by the remaining arguments; do it and exit.
+	#
+	$bulkcmd ||= ($#ARGV == 0 && $ARGV[0] eq "-");
+	if (! $bulkcmd) {
+		do_command(@ARGV);
+		exit(0);
+	}
+
+	# If we get here, we're in bulk command mode.  Read, tokenize,
+	# and execute commands from the standard input.  Test with
+	#   curl --data-binary @cmd_file http://dot.ucop.edu/nd/noidu_kt5\?-
+	# where cmd_file contains newline-separated commands.
+	# XXX make sure to %-decode web QUERY_STRING, so we don't have
+	#     to always put +'s for spaces
+	#
+	while (($line = <STDIN>)) {
+		do_command(shellwords($line));
+	}
+	exit(0);
+}
+
+sub do_command {
+
+	# Any remaining args should form a pt command.
+	# Look at the command part (if any) now, and complain about
+	# a non-existent database unless the command is "dbcreate".
+	#
+	my $command = shift;
+	if (! defined($command)) {	# if no command arg
+		usage(1, 1, "intro");
+		return(0);
+	}
+	#if (! -f $dbname
+	#		&& $command ne 'dbcreate' && $command ne 'help') {
+	#	# if the database doesn't exist when it needs to
+	#	bprint(*STDERR, "error: no database ($dbname) "
+	#		. "-- use dbcreate?\n\n");
+	#	usage(1, 1, "intro");
+	#	return(0)
+	#}
+	if (grep(/^$command$/, @valid_commands) != 1) {
+		print "error: no such command: $command (",
+			join(" ", @_), ")\n";
+		usage(1, 1, "intro");
+		return(0);
+	}
+	# It should now be safe to turn off strict 'refs' when we
+	# invoke a command via its subroutine name.
+	#if ($#_ < 0) {
+	#	usage(1);	# yyy say something senstive about $command
+	#usage(1, 1, "intro");
+	#	return(0);
+	#}
+
+	no strict 'refs';
+	&$command(@_);
+}
+
+# ========== Commands ===============
+
+use File::Path;
+
+sub addnode { my( $base, $id )=@_;
+
+	my ($root, $prefix) = base_init($base);
+	if (! defined ($root) || ! defined($prefix)) {
+		return 0;
+	}
+	if (! defined($id) || $id eq "") {
+		print STDERR "No identifier?\n"
+		return 0;
+	}
+	my $ppath = id2ppath($id);
+	my $wholepath = $base . $ppath;
+	eval { mkpath($wholepath) }
+	if ($@) {
+		print STDERR "Couldn't create $wholepath}
+		return 0;
+	}
+	print "Created $wholepath\n";
+	return(1);
+}
+
+sub delnode { my( $base, $id )=@_;
+
+	my ($root, $prefix) = base_init($base, true);
+	if (! defined ($root) || ! defined($prefix)) {
+		return 0;
+	}
+	if (! defined($id) || $id eq "") {
+		print STDERR "No identifier?\n"
+		return 0;
+	}
+	my $ppath = id2ppath($id);
+	my $wholepath = $base . $ppath;
+	eval { rmtree($wholepath) }
+	if ($@) {
+		print STDERR "Couldn't create $wholepath}
+		return 0;
+	}
+	print "Deleted $wholepath\n";
+	return(1);
+}
+
+# ========== Supporting Stuff ===============
+
+sub base_init { my( $base, $create )=@_;
+
+	my ($root, $prefix) = (undef, undef);
+	$create ||= false;
+
+	if ($create) {
+		$root = $base . '/pairtree_root';
+		eval { mkpath($root) }
+		if ($@) {
+			print STDERR "Couldn't create base $base}
+			return 0;
+		}
+	}
+	$prefix = `cat $base/pairtree_prefix` if
+		(! -e "$base/pairtree_prefix");
+
+		
+
+	return ($root, $prefix);
+}
+
+# Print a blank (space) in front of every newline.
+# First arg must be a filehandle.
+#
+sub bprint { my( $out, @args )=@_;
+	map {s/\n/\n /g} @args;
+	return print $out @args;
+}
+
+# Always returns 1 so it can be used in boolean blocks.
+#
+sub usage { my( $in_error, $brief, $topic )=@_;
+
+	! defined($in_error) and
+		$in_error = 1;		# default is to treat as error
+	$in_error and
+		$| = 1;			# flush any pending output
+	my $out =			# where to send output
+		($in_error ? *STDERR : *STDOUT);
+	! defined($brief) and
+		$brief = 1;		# default is to be brief
+	$topic ||= "intro";
+	$topic = lc($topic);
+
+	if ($topic eq "intro") {
+		bprint $out,
+qq@Usage:
+              pt [-f Base] [-v] [-h] Command Arguments@, ($brief ? qq@
+              pt -h             (for help with a Command summary).@
+	: qq@
+
+Base defaults to "." if not found from -f or PAIRTREE environment variable.
+For more information try "perldoc pt" or "pt help Command".
+@);
+	}
+	print $out "\n";
+	return(1);
+}
+
+sub who_are_you { my( $web )=@_;
+
+	my $user;
+	if ($web) {
+		$user = $ENV{'REMOTE_USER'} || '';
+		my $host = $ENV{'REMOTE_HOST'} || $ENV{'REMOTE_ADDR'} || '';
+		$user .= '@' . $host;
+	}
+
+	# Look up by REAL_USER_ID first.
+	my ($name, undef, undef, $gid) = getpwuid($<);
+	my $ugid = getlogin() || $name;
+	! $ugid and
+		return "";
+	$ugid .= "/" . ((getgrgid($gid))[0] || "");
+
+	# If EFFECTIVE_USER_ID differs from REAL_USER_ID, get its info too.
+	if ($> ne $<) {
+		($name, undef, undef, $gid) = getpwuid($>);
+		! $name and
+			return "";
+		$ugid .= " ($name/" . ((getgrgid($gid))[0] || "") . ")";
+	}
+	$user = ($user ? "$user $ugid" : $ugid);
+	return $user;
+}
+__END__
+
+=pod
+
+=for roff
+.nr PS 12p
+.nr VS 14.4p
+
+=head1 NAME
+
+pair - 
+
+=head1 SYNOPSIS
+
+B<pair> [ B<-f> I<dir> ] [ B<-vh> ] I<Command> I<Arguments>
+
+=head1 DESCRIPTION
+
+The B<pair> utility ...
+Web
+
+=cut

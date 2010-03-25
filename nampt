@@ -1,0 +1,236 @@
+#!/usr/bin/perl -wIlib
+
+use strict;
+# XXX use warnings; ???
+
+my $VERSION;
+$VERSION = sprintf "%d.%02d", q$Revision: 0.01 $ =~ /(\d+)/g;
+
+# pt - pairtree routines
+#
+# Do "perl pt --man" for description.
+
+use File::Pairtree;
+use File::ANVL;
+use Getopt::Long qw(:config bundling_override);
+use Pod::Usage;
+
+my %opt = (
+	help		=> 0,
+	man		=> 0,
+	version		=> 0,
+	directory	=> 0,
+	format		=> 0,
+	verbose		=> 0,
+);
+
+my $format = FMT_PLAIN;		# default
+
+{	# main
+	GetOptions(\%opt,
+		'help|?',
+		'man',
+		'version',
+		'format|m',		# one of plain, anvl, xml
+		'directory|d',
+		'verbose|v',
+	) or pod2usage(1);
+
+	pod2usage(1)
+		if $opt{help};
+	pod2usage(-exitstatus => 0, -verbose => 2)
+		if $opt{man};
+	print "$VERSION\n" and exit(0)
+		if $opt{version};
+
+	if ($opt{directory}) {
+		@ARGV > 0 or
+			pod2usage("$0: directory argument needed");
+		my $dir = shift @ARGV;
+		chdir($dir) or
+			pod2usage("$dir: $!");
+	}
+	if ($opt{format}) {
+		@ARGV > 0 or
+			pod2usage("$0: format argument needed, one of: "
+				. "plain|anvl|xml");
+		my $fmt = lc(shift @ARGV);
+
+		if    ($fmt eq "anvl")	{ $format = FMT_ANVL; }
+		elsif ($fmt eq "xml")	{ $format = FMT_XML; }
+		elsif ($fmt eq "plain")	{ $format = FMT_PLAIN; }
+		else {
+			pod2usage("$0: $fmt: unrecognized format argument");
+		}
+	}
+
+	@ARGV > 0 or
+		pod2usage("$0: not enough arguments");
+
+	my $cmd = lc(shift @ARGV);
+	my ($num, $fname, $fvalue, $msg, @nnv);
+	my $get = 0;
+
+	# pt {i2p,p2i,mknode,lsnode,delnode} arg
+	# id2ppath ppath2id s2ppchars id2pairpath pairpath2id
+	if ($cmd eq "i2p") {
+		@ARGV > 0 or
+			pod2usage("$cmd: needs at least one argument");
+		# XXX use some version of "out"
+		print(id2ppath($_), s2ppchars($_), "\n")
+			foreach (@ARGV);
+	}
+	elsif (($get = $cmd eq "get") || $cmd eq "del" || $cmd eq "delall") {
+
+		$cmd eq "del" && @ARGV == 0 and
+			pod2usage("$cmd: needs tag arguments to delete");
+
+		# same args for command as for get_namaste()
+		@nnv = get_namaste(@ARGV);
+		while (defined($num = shift(@nnv))) {
+			$fname = shift(@nnv);
+			$fvalue = shift(@nnv);
+			if (! $get) {		# we're doing a delete
+				unlink($fname) or
+					print STDERR "$fname: $!";
+				next;
+			}
+			# XXXXX map nums to kernel tags (1->who, etc)
+			#     different kinds of output, eg, XML
+			out(DATA, $num, $fvalue);
+			$opt{verbose} and
+				out(NOTE, "file", $fname);
+		}
+
+	}
+	else {
+		pod2usage("$cmd: unrecognized command");
+	}
+}
+
+# Output multiplexor.
+#
+sub omx { my( $mode, $num, $value, $attribute, @other )=@_;
+
+	# try to convert number to a human readable name if possible
+	my $name = num2dk($num);
+
+	if ($format eq FMT_PLAIN) {
+		return 1			# don't print comments
+			if ($mode eq NOTE);
+		# if we get here, we have a non-comment (DATA)
+		# xxx ignoring attribute and other
+		return (print $value, "\n");
+	}
+	elsif ($format eq FMT_ANVL) {	
+		return (print "# ", anvl_fmt($name, $value))
+			if ($mode eq NOTE);
+		# if we get here, we have a non-comment (DATA)
+		# xxx ignoring attribute and other
+		return (print anvl_fmt($name, $value));
+	}
+	elsif ($format ne FMT_XML) {	
+		pod2usage("$0: $format: unsupported format code");
+	}
+
+	# if we get here, we're doing XML formatted output
+	# xxx mostly untested code
+	# xxx need to escape before embedding
+	#
+	return (print "<!-- $name, $value -->\n")
+		if ($mode eq NOTE);
+	# if we get here, we have a non-comment (DATA)
+	# xxx ignoring attribute and other
+	return (print "<$name>$value</$name>\n");
+}
+
+__END__
+
+=head1 NAME
+
+nam - set, get, and delete Namaste tag files
+
+=head1 SYNOPSIS
+
+=over
+
+=item B<nam> [B<-vh>] [B<-f> I<fmt>] [B<-d> I<dir>] B<set> I<integer> I<string> [[I<maxlen>] I<ellipsis>]
+
+=item B<nam> [B<-vh>] [B<-f> I<fmt>] [B<-d> I<dir>] B<get> [I<integer> ...]
+
+=item B<nam> [B<-vh>] [B<-f> I<fmt>] [B<-d> I<dir>] B<del> [I<integer> ...]
+
+=item B<nam> [B<-vh>] [B<-f> I<fmt>] [B<-d> I<dir>] B<delall>
+
+=back
+
+=head1 DESCRIPTION
+
+The B<nam> command manages Namaste tag files.  A Namaste (Name-as-text)
+tag file holds a single metadata value and its filename is derived from
+the metadata value.
+
+=head1 OPTIONS
+
+=over
+
+=item B<-d>, B<--directory>
+
+Use I<directory> instead of the current directory to look for tag files.
+
+=item B<-f>, B<--format>
+
+Output in format I<fmt>, one of C<plain> (unlabeled),
+C<anvl>, or C<xml>.  Default format is C<plain>.
+
+=item B<-v>, B<--verbose>
+
+Output ancillary information (the tag filename itself) as a comment.
+
+=item B<-h>, B<--help>
+
+Print extended help documentation.
+
+=item B<--man>
+
+Print full documentation.
+
+=item B<--version>
+
+Print the current version number and exit.
+
+=back
+
+=head1 EXAMPLES
+
+  nam set 0 bagit_0.98
+  nam set 1 'Mark Twain'
+  nam set 2 'Adventures of Huckleberry Finn' 13m
+  nam get
+  nam delall
+
+=head1 SEE ALSO
+
+rm(1)
+
+=head1 AUTHOR
+
+John Kunze I<jak at ucop dot edu>
+
+=head1 COPYRIGHT
+
+  Copyright 2009 UC Regents.  Open source Apache License, Version 2.
+
+=begin CPAN
+
+=head1 README
+
+Manage Namaste tag files.
+
+=head1 SCRIPT CATEGORIES
+
+=end CPAN
+
+=cut
+
+#  LocalWords:  LocalWords Getopt GetOptions ARGV 

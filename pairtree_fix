@@ -1,0 +1,5 @@
+?? mkdir t/pairtree_root/ab/ef/ii/obj; mv x t/pairtree_root/ab/ef/ii/obj
+?? mkdir t/pairtree_root/ab/ef/ij/obj; mv xy t/pairtree_root/ab/ef/ij/obj
+?? mkdir t/pairtree_root/ab/ef/ik/obj; mv xyz t/pairtree_root/ab/ef/ik/obj
+UG mkdir t/pairtree_root/ab/<>; mv x y z t/pairtree_root/ab/<>; mv t/pairtree_root/ab/<> t/pairtree_root/ab/obj
+UG mkdir t/pairtree_root/<>; mv obj object t/pairtree_root/<>; mv t/pairtree_root/<> t/pairtree_root/obj

@@ -1,0 +1,96 @@
+#!/bin/sh
+
+# XXX what to do with symlinks?
+R=pairtree_root
+
+# Normally don't show every file/dir that find handles.
+# Set to '-print' if you want to see everything.
+noshowall='-true'
+#noshowall='-print'
+
+# Normally prune for speed.  Set noshowall='-print' and noprune='-true'
+# to see what processing steps would happen if you don't prune.
+#noprune='-true'
+noprune='-prune'
+
+# This matches the base pairpath in 'find'.  Depends on $Q.
+PP='\([^/][^/]/\)*[^/][^/]?'
+# Same match, but suitable for a Perl regexp.  Depends on $P.
+Q='([^/][^/]/)*[^/][^/]?'
+
+# Below NS=Non-Shorty, UF=Unencapsulated File warning, PM=Post-Morty warning
+#       EP=Empty Pairpath indicator
+#
+find $1 $noshowall , -regex ".*$R/.*pairtree.*" -prune -o \( \
+	-type f \
+		-regex ".*$R/$PP/[^/]+" \
+		-printf 'UF %P\n' \
+	, \
+	-type d \
+		-regex ".*$R/$PP/[^/][^/][^/]+" \
+		-printf 'NS %P\n' \
+		$noprune \
+	, \
+	-type d \
+		-regex ".*$R/\([^/][^/]/\)*[^/]/[^/][^/]?" \
+		-printf 'PM %P\n' \
+		$noprune \
+	, \
+	-type d \
+		-regex ".*$R/$PP" \
+		-empty \
+		-printf 'EP %P\n' \
+	\) \
+| perl -e "		# a Perl block that's careful in it's use of quotes
+	BEGIN {
+		\$Q = qq{$Q};	# get regexp from shell; Q is almost P
+		\$pp = \$found = \$type = \$object = '';
+	}" -lne '		# Perl program continues, in stronger quotes
+	$prevpp = $pp;
+	$prevfound = $found;
+	$prevtype = $type;
+	if (! /^(\w+) (.*)/) {	# this is a "show all" line; pass through
+		print;
+		next;
+	}
+	($type, $found) = ($1, $2);
+	$pp = $1 if (m{^UF ($Q)/[^/]+});
+	$pp = $1 if (m{^NS ($Q)/[^/][^/][^/]+});
+	$pp = $1 if (m{^PM ($Q)/[^/]+});
+	$pp = $1 if (m{^EP ($Q)});
+	# xxx what if none of the above?
+	if ($object) {
+		if ($pp eq $prevpp) {		# then stay in object
+			# add to existing object
+			$object .= " $found";
+		}
+		else {				# else leave object
+			# dump and zero out object in preparation for another
+			print "$object $prevpp/<>; mv $prevpp/<> $prevpp/obj";
+			$object = "";
+		}
+	}
+	else {
+		print "pp=$pp, prevpp=$prevpp, $_";
+		if ($pp eq $prevpp) {		# then enter object
+			# initiate new object with offer to encapsulate
+			$object = "?? mkdir $pp/<>; mv $prevfound $found";
+		}
+		elsif ($type eq "UF") {		# else do not enter object
+			# XXX cannot fix until know UF not part of group
+			# offer to encapusulate a lone file
+			print "?? mkdir $pp/obj; mv $found $pp/obj"
+		}
+		else {
+			print "OK $type $found in path $pp";
+		}
+	}
+'
+
+# XXXX make sure to declare/catch /be/nt/o/r/ as improper encapsulation
+
+# Depends on breadth first (default) 'find' and these GNU find-like features:
+#   ',' for efficiency
+#   -regex for fuller, wholepath matching
+#   -printf to be able to preserve qualifications that 'find' found
+# This script does not (yet?) find dangling pairpaths.

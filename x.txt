@@ -1,0 +1,152 @@
+my $wpname = '';		# whole pathname
+my $tpname = '';		# tail of name
+my $cdname = '';		# current directory name
+
+my %curobj = ( 'ppath' => '', 'encaperr' => 0, 'octets' => 0, 'streams' => 0 );
+
+my @ppstack = ();
+
+sub mkstackitem{ my( $ppath )=@_;
+	return { 'pp' => $ppath, 'bytes' => 0, 'items' => [], 'flag' => 0 };
+}
+
+push(@ppstack, mkstackitem(''));
+my $top;
+my $oldcdname = '';
+my $otop;
+
+find({ wanted => \&donode, preprocess => \&prenode, postprocess => \&postnode,
+	follow_fast => 1 }, $tree);
+
+sub donode{	# receives no args
+
+	$cdname = $File::Find::dir;		# current parent directory name
+	$tpname = $_;				# current filename in that dir
+	$wpname = $File::Find::name;		# complete pathname to file
+	#($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $sze) = stat($tpname);
+	print "NEXT: $wpname\n";
+
+	# Node invariant:  upon entry compare parent to stack top and pop
+	# stack (unvisiting each node) until top equals current parent.
+	# 
+	# Check our current ancestory and pop the stack as needed
+	# to find the parent for this (current) node.
+	#
+	$top = $ppstack[$#ppstack];	# xxx is this $#... safe?
+	if ($cdname eq $top->{'pp'}) {
+		print "descendant $_\n";	# xxx now what?
+		#push(@{$top->{'items'}}, $_);
+		#$top->{'flag'} |= 1;
+	}
+	else {
+		do {
+			# XXXXX much reporting during "unvisit"
+			$otop = pop(@ppstack);
+			print "unvisiting $otop->{'pp'}, item(s)=",
+				join(", ", @{$otop->{'items'}}),
+				", size=$otop->{'bytes'}, ",
+				"flag=$otop->{'flag'}\n";
+				pop(@ppstack);   # xxx EP?
+			$top = $ppstack[$#ppstack];	# xxx $#... safe?
+		} until ($cdname eq $top->{'pp'});
+	}
+
+	# If we get here, the stack top is the same as our parent.
+	#
+	if (-f _) {
+
+		# Regular File Branch.
+		#
+		# Every file belongs to some item.  Every item is either an
+		# object or, if improper encapsulation, part of an object.
+		#
+		if ($wpname =~ m@^.*$R/(.*/)?pairtree.*$@) {
+		#	-prune
+		}
+		elsif ($wpname =~ m@^.*$R/$P/[^/]+$@) {
+			#print "m@.*$R/$P/[^/]+@: $_\n";
+			# yyy add item to stacked object top level,
+			#     flag encap err
+			# yyy add size to stacked object
+		 	print "$cdname UF $tpname\n";
+		#	-fprintf $altout 'UF %h %s\n'
+		}
+		else {
+			# yyy add size to stacked object
+			$curobj{'bytes'} += (-s _);
+			$curobj{'streams'}++;
+			#print "cobjbytes=$curobj{'bytes'}, cobjstreams=",
+			#	$curobj{'streams'}, "\n";
+		#	-fprintf $altout 'IN %p %s\n'
+		#	$noprune
+		}
+		return;
+	}
+	elsif (! -d _) {
+
+		# Non-regular file, non-directory Branch.
+		#
+		$irregularcount++;
+		# xxxx can't under follow_fast, _ caches stat results; can't I
+		# get the file types (to count)  without doing another stat?
+		return;
+	}
+
+	# Directory Branch.
+	#
+	# If we're here we know that we have a directory (-d _).
+
+	# Now, look at the form of pathname.
+	#
+	if ($wpname =~ m@^.*$R/(.*/)?pairtree.*$@) {
+	#	-prune
+	}
+	# XXX add re qualifier so Perl knows re's not changing
+	# if we've hit what might be a regular object dir...
+	elsif ($wpname =~ m@^.*$R/($P/)?[^/]{$pairp1,}$@) {
+		#%top = (pp => $cdname, bytes => 0,
+		#	items => ($_), flag => 0);  # xxx PM ?
+		$top = mkstackitem($cdname);	# xxx PM?
+		push(@{$top->{'items'}}, $_);
+		push(@ppstack, $top);
+
+		# yyy compare cdname to stack top.
+		#     if cdname is same as stack top, {add item
+		#     to list contained in stack top, flag encaperr}
+		#     elsif cdname is not superstring of stack top {
+		#     we've just closed off a ppath and we need
+		#     to pop the stack top and report (a) proper
+		#     or improper encapsulation (#items > 1 or
+		#     any file item) and (b) accumulated oxum (if
+		#     no items, report EP empty ppath.}
+		#     In any case, push curr ppath as new stack
+		#     top and add item to list at stack top, but
+		#     flag encap err if PM err)
+		#     (at end, report stack top)
+		# start new object; but end previous object first
+		# form: ppath, EncapErr, bytes, streams
+		newptobj($cdname, 0, 0, 0);
+		print "$cdname NS $tpname\n";
+		#	-fprintf $altout 'START %h 0\n'
+		#	$noprune
+	}
+	elsif ($wpname =~ m@^.*$R/$P$@) {
+		# yyy see above
+		#	-empty
+		#	-printf '%p EP -\n'
+	}
+	# $pair, $pairm1, $pairp1
+	elsif ($wpname =~
+	    m@^.*$R/([^/]{$pair}/)*[^/]{1,$pairm1}/[^/]{1,$pair}$@) {
+		# yyy [combine with NS regexp and do similarly???]
+		# xxx push dir node
+		print "$cdname PM $tpname\n";
+		#	-fprintf $altout 'START %h 0\n'
+		#	$noprune
+	}
+
+	# Directory node invariant:  upon exit current dir node must be
+	# pushed.
+	#
+	return;
+}
