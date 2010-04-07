@@ -5,5 +5,5 @@ META.yml			Module meta-data (added by MakeMaker)
 pt
 README
 t/i2p2.t
-t/pttest.t
+t/pt.t
 VERSION

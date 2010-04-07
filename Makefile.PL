@@ -10,7 +10,7 @@ WriteMakefile(
     VERSION_FROM        => 'VERSION',
     ABSTRACT_FROM       => 'lib/File/Pairtree.pm',
     ($ExtUtils::MakeMaker::VERSION >= 6.3002
-      ? ('LICENSE'=> 'Apache2')
+      ? ('LICENSE'=> 'BSD')
       : ()),
     PM			=> {
 	'lib/File/Pairtree.pm'	=> 'blib/lib/File/Pairtree.pm'
@@ -23,9 +23,9 @@ WriteMakefile(
 	'File::Find'	=> '0',
 	'File::Path'	=> '0',
 	'File::Glob'	=> '0',
-	'File::ANVL'	=> '0.16',
-	'File::Value'	=> '0.17',
-	'File::Namaste'	=> '0.17',
+	'File::OM'	=> '0.21',
+	'File::Value'	=> '0.20',
+	'File::Namaste'	=> '0.20',
     },
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean               => { FILES => 'File-Value-*' },

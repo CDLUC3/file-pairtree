@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 our $VERSION;
-$VERSION = sprintf "%d.%02d", q$Name: Release-0-26 $ =~ /Release-(\d+)-(\d+)/;
+$VERSION = sprintf "%d.%02d", q$Name: Release-0-27 $ =~ /Release-(\d+)-(\d+)/;
 
 require Exporter;
 our @ISA = qw(Exporter);
@@ -378,9 +378,11 @@ sub pt_lstree { my( $tree, $r_opt, $r_visit_node, $r_wrapup )=@_;
 	# Dummy call to pt_newobj() to cough up the last buffered object.
 	pt_newobj("", 0, 0, 0);			# shake out the last one
 	# XXX what does find return?
-	print "lstree: find returned '$ret' for $tree"		if $ret;
-	# XXX call om*
-	print "$objectcount object", ($objectcount == 1 ? "" : "s"), "\n";
+	#print "lstree: find returned '$ret' for $tree"		if $ret;
+	$gr_opt->{om}->elem('lstree', "find returned '$ret' for $tree")	if $ret;
+	#print "$objectcount object", ($objectcount == 1 ? "" : "s"), "\n";
+	$gr_opt->{om}->elem('objectcount', "$objectcount object" .
+		($objectcount == 1 ? "" : "s"));
 
 	return $ret;
 }
@@ -480,7 +482,7 @@ sub pt_mktree { my( $dir, $prefix, $r_opt )=@_;
 		$$r_opt{msg} = "$pxfile: $msg";
 		return 1;
 	}
-	$msg = set_namaste($dir, "0", "pairtree_$VERSION");
+	$msg = nam_set($dir, undef, '0', "pairtree_$VERSION");
 	# xxxx croak or return via r_opt{msg}
 	$msg		and croak "Couldn't create namaste tag in $dir: $msg";
 
@@ -563,11 +565,11 @@ sub pt_newobj { my( $ppath, $encaperr, $octets, $streams )=@_;
 		$_ = ppath2id($curobj{'ppath'});
 		s/^/$$gr_opt{prefix}/;		# uses global set in lstree()
 		$$gr_opt{long} and
-			print(&{ $$gr_opt{om} }(DATA, "node",
+			$gr_opt->{om}->elem('node',
 				join("  ", $_, $curobj{'ppath'},
-				"$curobj{'octets'}.$curobj{'streams'}"))), 1
+				"$curobj{'octets'}.$curobj{'streams'}")), 1
 		or
-			print(&{ $$gr_opt{om} }(DATA, "node", $_)), 1
+			$gr_opt->{om}->elem('node', $_), 1
 		;
 		$curobj{'ppath'} eq $ppath and
 			print "error: corrupted pairtree at pairpath ",

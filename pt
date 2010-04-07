@@ -4,17 +4,6 @@ use 5.006;
 use strict;
 use warnings;
 
-# #!/bin/sh
-# #! -*- perl -*-
-# eval 'exec perl -x -S $0 ${1+"$@"} ;'
-# 	if 0;
-# # Above lines are for portable Perl startup honoring PATH and emacs.  Don't
-# # change lightly.  Options may be inserted before "-x".  For background see
-# # "perldoc perlrun" and http://cr.yp.to/slashpackage/studies/findingperl/7 .
-# # Developers may need to run as "perl -x -Mblib ..." or "perl -x -Ilib ...".
-# # XXX above lines as of 8/3/2009
-
-
 # xxx support for shadow tree of deletions? pairtree_trash?
 
 my $VERSION = $File::Pairtree::VERSION;
@@ -22,7 +11,7 @@ my $VERSION = $File::Pairtree::VERSION;
 use File::Pairtree;
 use File::Path;
 use File::Find;		# for lstree, lsnode
-use File::ANVL;		# for om_* output multiplexor routines
+use File::OM;
 
 use Pod::Usage;
 # this :config allows -h24w80 for '‐h 24 ‐w 80', -vax for --vax or --Vax
@@ -32,8 +21,8 @@ my $dir;	# global defining our directory, ends in "pairtree_root"
 
 my $R = $File::Pairtree::root;
 
-my $om;				# output multiplexor routine
-my %o;				# global to communicate options to module
+my $om;		# output multiplexor routine shared among 'pt' routines
+my %o;		# global to communicate options to module
 
 my %opt = (
 	all		=> 0,
@@ -68,10 +57,13 @@ my %opt = (
 	$opt{man}	and pod2usage(-exitstatus => 0, -verbose => 2);
 	$opt{version}	and print("$VERSION\n"), exit(0);
 
-	$om = "om_" .			# initialize output multiplexor
-		($opt{format} || "plain");
-	defined(&$om)	or pod2usage("$0: unknown format: $opt{format}");
-	# xxxxx  $o{om} = $om;
+	my $format = $opt{format} || 'Plain';	# given format name
+	my %om_opt = (
+		outhandle	=> *STDOUT,
+	);
+	$om = File::OM->new($format, \%om_opt) or
+		pod2usage("$0: unknown format: $format");
+
 	$opt{bud} = 0;		# xxx temporary kludge
 
 	my $cmd = shift @ARGV;
@@ -148,14 +140,13 @@ sub do_lsnode { my( @nodes )=@_;
 	$o{force} = $opt{force};
 
 	my ($id, $ret);
-	no strict 'refs';	# turn off complaints about calls to &$om()
 	for $id (@nodes) {
 		$ret = pt_lsnode($dir, $id, \%o);
 		$ret or		# if success
-			print(&$om(DATA, $id, $o{bud})),
+			$om->elem($id, $o{bud}),
 			next;
 		$exit_status = $ret;	# if we get here, we had trouble
-		print(&$om(DATA, "error", "$id: $o{msg}"));
+		$om->elem('error', "$id: $o{msg}");
 	}
 	return $exit_status;
 }
@@ -174,12 +165,10 @@ sub do_lstree { my( @trees )=@_;
 	my $exit_status = 0;		# optimistic
 
 	my ($tree, $ret);
-	no strict 'refs';	# turn off complaints about calls to &$om()
 	for $tree (@trees) {
 		if (! -e $tree) {
 			$exit_status = 1;
-			print(&$om(DATA, "error",
-				"$tree: no such file or directory"));
+			$om->elem('error', "$tree: no such file or directory");
 			next;
 		}
 		# set prefix based on $tree's parent (from up_dir)
@@ -188,7 +177,7 @@ sub do_lstree { my( @trees )=@_;
 		$o{force} = $opt{force};
 		$o{long} = $opt{long};
 		$o{all} = $opt{all};
-		$o{om} = \&$om;
+		$o{om} = $om;
 
 		$o{follow_fast} = 1		# xxx set with $opt?
 			unless defined $o{follow_fast};
@@ -200,10 +189,9 @@ sub do_lstree { my( @trees )=@_;
 		# optional 3rd arg is &visit function to use instead
 		$ret = pt_lstree($tree, \%o);	# xxx set $o{summary} ?
 		$ret or		# if success
-			#print(&$om(DATA, "summary", $o{summary})),
 			next;
 		$exit_status = $ret;	# if we get here, we had trouble
-		print(&$om(DATA, "error", "$tree: $o{msg}"));
+		$om->elem('error', "$tree: $o{msg}");
 	}
 	return $exit_status;
 }
@@ -224,13 +212,12 @@ sub do_mknode { my( @nodes )=@_;
 	$o{force} = $opt{force};
 
 	my ($id, $ret);
-	no strict 'refs';	# turn off complaints about calls to &$om()
 	for $id (@nodes) {
 		($ret = pt_mknode($dir, $id, \%o)) and
-			print(&$om(DATA, $id, $o{bud})),
+			$om->elem($id, $o{bud}),
 			next;
 		$exit_status = 1;	# if we get here, we had trouble
-		print(&$om(DATA, "error", "$id: $o{msg}"));
+		$om->elem('error', "$id: $o{msg}");
 	}
 	return $exit_status;
 }
@@ -242,13 +229,12 @@ sub do_mktree { my( $tree, $prefix )=@_;
 		if ($tree ne $dir);
 	
 	my $ret = pt_mktree($tree, $prefix, \%o);
-	no strict 'refs';	# turn off complaints about calls to &$om()
 	$ret and		# if call failed
-		print(&$om(DATA, "error", "$tree: $o{msg}")),
+		$om->elem("error", "$tree: $o{msg}"),
 		return 1;
 
 	$opt{verbose} and
-		print(&$om(DATA, "mktree", $tree));
+		$om->elem("mktree", $tree);
 	return 0;		# success means exit status 0
 }
 
@@ -267,14 +253,13 @@ sub do_rmnode { my( @nodes )=@_;
 	$o{force} = $opt{force};
 
 	my ($id, $ret);
-	no strict 'refs';	# turn off complaints about calls to &$om()
 	for $id (@nodes) {
 		$ret = pt_rmnode($dir, $id, \%o);
 		$ret or		# if success
-			print(&$om(DATA, $id, $o{bud})),
+			$om->elem($id, $o{bud}),
 			next;
 		$exit_status = $ret;	# if we get here, we had trouble
-		print(&$om(DATA, "error", "$id: $o{msg}"));
+		$om->elem('error', "$id: $o{msg}");
 	}
 	return $exit_status;
 }
