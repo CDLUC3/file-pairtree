@@ -53,7 +53,7 @@ my %opt = (
 	)
 			or  pod2usage(-exitstatus => 2, -verbose => 1);
 
-	$opt{help}	and pod2usage(-exitstatus => 0, -verbose => 1);
+	$opt{help}	and help(), exit(0);
 	$opt{man}	and pod2usage(-exitstatus => 0, -verbose => 2);
 	$opt{version}	and print("$VERSION\n"), exit(0);
 
@@ -67,7 +67,7 @@ my %opt = (
 	$opt{bud} = 0;		# xxx temporary kludge
 
 	my $cmd = shift @ARGV;
-	defined($cmd)	or pod2usage("$0: no command given");
+	defined($cmd)	or help(), exit(1);
 	$cmd = "do_" . lc($cmd);
 	defined(&$cmd)	or pod2usage("$0: unknown command: $cmd");
 
@@ -280,6 +280,35 @@ sub do_p2i { my( @paths )=@_;
 	print ppath2id($_), "\n"	for (@paths);
 }
 
+sub help {
+	print << 'EOI';
+
+pt - make, remove, and list pairtrees and pairtree nodes
+
+   pt [-d dir] mktree directory [prefix]               # make a pairtree
+   pt [-l] [-d dir] [rmtree | lstree] [directory] ...  # remove/list tree(s)
+   pt [-d dir] [mknode | rmnode | lsnode] id ...       # manipulate bud(s)
+   pt [i2p | p2i] name ...                             # pure id/path mapping
+
+Pairtrees map identifiers to filesystem paths.  Use sub-commands to create,
+delete, modify, and report on them.  Leaves are the user's concern, but with
+'mknode' and an id, "pt" encloses every leaf in a bud directory using the
+full id (with exceptions for short ids).  See "pt --man" for more.  Examples:
+
+   $ pt mknode foo bar zafp             # mknode with no tree first calls
+   ./pairtree_root/fo/o/foo		# mktree if there's no pairtree, then
+   ./pairtree_root/ba/r/bar		# creates each pairpath and bud (node)
+   ./pairtree_root/za/fp/zafp		# directory at the pairpath's end
+   $ pt rmnode bar			# remove node identified by 'bar'
+   removed: bar | ./pairtree_root/ba/r/
+   $ touch ./pairtree_root/za/fp/zafp/{a,b,c}	# create some leaf content
+   $ pt lstree -l			# so we have something to report on
+   zafp   0.3				# after the bud name is the "oxum",
+   foo   0.0				# or # of octets and # of files
+EOI
+	return 1;
+}
+
 __END__
 
 =for roff
@@ -288,13 +317,13 @@ __END__
 
 =head1 NAME
 
-pt - pairtree manipulation commands
+pt - command to manipulate pairtrees
 
 =head1 SYNOPSIS
 
 =over
 
-=item B<pt> [B<-d dir>] [B<mktree>] I<directory> [I<prefix>]
+=item B<pt> [B<-d dir>] B<mktree> I<directory> [I<prefix>]
 
 =item B<pt> [B<-l>] [B<-d dir>] [B<rmtree | lstree>] [I<directory>] ...
 

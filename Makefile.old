@@ -13,11 +13,11 @@
 #     ABSTRACT_FROM => q[lib/File/Pairtree.pm]
 #     AUTHOR => q[John A. Kunze <jak@ucop.edu>]
 #     EXE_FILES => [q[pt]]
-#     LICENSE => q[Apache2]
+#     LICENSE => q[BSD]
 #     NAME => q[File::Pairtree]
 #     PL_FILES => {  }
 #     PM => { lib/File/Pairtree.pm=>q[blib/lib/File/Pairtree.pm] }
-#     PREREQ_PM => { Getopt::Long=>q[0], File::Glob=>q[0], Pod::Usage=>q[0], Carp=>q[0], File::Find=>q[0], File::Value=>q[0.17], File::Path=>q[0], File::ANVL=>q[0.16], File::Namaste=>q[0.17] }
+#     PREREQ_PM => { Getopt::Long=>q[0], File::Glob=>q[0], Pod::Usage=>q[0], Carp=>q[0], File::Find=>q[0], File::Value=>q[0.20], File::Path=>q[0], File::Namaste=>q[0.20], File::OM=>q[0.21] }
 #     VERSION_FROM => q[VERSION]
 #     clean => { FILES=>q[File-Value-*] }
 #     dist => { COMPRESS=>q[gzip -9f], SUFFIX=>q[gz] }
@@ -497,19 +497,19 @@ metafile : create_distdir
 	$(NOECHO) $(ECHO) 'name:                File-Pairtree' >> META_new.yml
 	$(NOECHO) $(ECHO) 'version:             0.27' >> META_new.yml
 	$(NOECHO) $(ECHO) 'abstract:            routines to manage pairtrees' >> META_new.yml
-	$(NOECHO) $(ECHO) 'license:             Apache2' >> META_new.yml
+	$(NOECHO) $(ECHO) 'license:             BSD' >> META_new.yml
 	$(NOECHO) $(ECHO) 'author:              ' >> META_new.yml
 	$(NOECHO) $(ECHO) '    - John A. Kunze <jak@ucop.edu>' >> META_new.yml
 	$(NOECHO) $(ECHO) 'generated_by:        ExtUtils::MakeMaker version 6.42' >> META_new.yml
 	$(NOECHO) $(ECHO) 'distribution_type:   module' >> META_new.yml
 	$(NOECHO) $(ECHO) 'requires:     ' >> META_new.yml
 	$(NOECHO) $(ECHO) '    Carp:                          0' >> META_new.yml
-	$(NOECHO) $(ECHO) '    File::ANVL:                    0.16' >> META_new.yml
 	$(NOECHO) $(ECHO) '    File::Find:                    0' >> META_new.yml
 	$(NOECHO) $(ECHO) '    File::Glob:                    0' >> META_new.yml
-	$(NOECHO) $(ECHO) '    File::Namaste:                 0.17' >> META_new.yml
+	$(NOECHO) $(ECHO) '    File::Namaste:                 0.20' >> META_new.yml
+	$(NOECHO) $(ECHO) '    File::OM:                      0.21' >> META_new.yml
 	$(NOECHO) $(ECHO) '    File::Path:                    0' >> META_new.yml
-	$(NOECHO) $(ECHO) '    File::Value:                   0.17' >> META_new.yml
+	$(NOECHO) $(ECHO) '    File::Value:                   0.20' >> META_new.yml
 	$(NOECHO) $(ECHO) '    Getopt::Long:                  0' >> META_new.yml
 	$(NOECHO) $(ECHO) '    Pod::Usage:                    0' >> META_new.yml
 	$(NOECHO) $(ECHO) 'meta-spec:' >> META_new.yml
@@ -788,12 +788,12 @@ ppd :
 	$(NOECHO) $(ECHO) '    <AUTHOR>John A. Kunze &lt;jak@ucop.edu&gt;</AUTHOR>' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '    <IMPLEMENTATION>' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '        <DEPENDENCY NAME="Carp" VERSION="0,0,0,0" />' >> $(DISTNAME).ppd
-	$(NOECHO) $(ECHO) '        <DEPENDENCY NAME="File-ANVL" VERSION="0,16,0,0" />' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '        <DEPENDENCY NAME="File-Find" VERSION="0,0,0,0" />' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '        <DEPENDENCY NAME="File-Glob" VERSION="0,0,0,0" />' >> $(DISTNAME).ppd
-	$(NOECHO) $(ECHO) '        <DEPENDENCY NAME="File-Namaste" VERSION="0,17,0,0" />' >> $(DISTNAME).ppd
+	$(NOECHO) $(ECHO) '        <DEPENDENCY NAME="File-Namaste" VERSION="0,20,0,0" />' >> $(DISTNAME).ppd
+	$(NOECHO) $(ECHO) '        <DEPENDENCY NAME="File-OM" VERSION="0,21,0,0" />' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '        <DEPENDENCY NAME="File-Path" VERSION="0,0,0,0" />' >> $(DISTNAME).ppd
-	$(NOECHO) $(ECHO) '        <DEPENDENCY NAME="File-Value" VERSION="0,17,0,0" />' >> $(DISTNAME).ppd
+	$(NOECHO) $(ECHO) '        <DEPENDENCY NAME="File-Value" VERSION="0,20,0,0" />' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '        <DEPENDENCY NAME="Getopt-Long" VERSION="0,0,0,0" />' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '        <DEPENDENCY NAME="Pod-Usage" VERSION="0,0,0,0" />' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '        <OS NAME="$(OSNAME)" />' >> $(DISTNAME).ppd
