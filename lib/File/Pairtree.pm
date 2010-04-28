@@ -707,7 +707,7 @@ This is very brief documentation for the B<Pairtree> Perl module.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright 2008 UC Regents.  Open source Apache License, Version 2.
+Copyright 2008-2010 UC Regents.  Open source BSD license.
 
 =cut
 

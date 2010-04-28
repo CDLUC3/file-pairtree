@@ -344,7 +344,9 @@ the current directory or from a directory specified with B<-d>.
 The first form creates a pairtree, recording an optional prefix that
 will be stripped from an identifier before mapping it to a pairpath
 and prepended to an identifier generated from a pairpath.  The second
-form deletes or lists an entire tree of nodes.
+form deletes or lists an entire tree of nodes.  The format of listing
+output can be specified with the B<--format> option, currently one of
+"ANVL", "XML", "JSON", or "Plain" (default).
 
 The third form creates, deletes, or tests the existence of tree nodes
 addressed via the identifier corresponding to each node's filesystem
@@ -367,7 +369,7 @@ The fourth form permits access to the purely lexical lower level
 conversion between identifiers and pairpaths (no filesystem lookups
 take place).
 
-This alpha-level software has not been extensively tested.
+This beta-level software has not been extensively tested.
 
 =head1 EXAMPLES
 
@@ -396,6 +398,11 @@ This alpha-level software has not been extensively tested.
 Specify pairtree I<directory>.  A "pairtree_root" component will be added on
 if not already present in I<directory>.
 
+=item B<-m> I<format>, B<--format> I<format>
+
+Output in the given I<format>, currently one of "ANVL", "XML",
+"JSON", or "Plain" (default).
+
 =item B<-h>, B<--help>
 
 Print extended help documentation.
@@ -414,7 +421,7 @@ Print the current version number and exit.
 
 =item B<-bmfa>
 
-Options yet to come, for B<--bud>, B<--format>, B<--force>, B<--all>.
+Options yet to come, for B<--bud>, B<--force>, B<--all>.
 
 =back
 
@@ -428,7 +435,7 @@ John Kunze I<jak at ucop dot edu>
 
 =head1 COPYRIGHT
 
-  Copyright 2009 UC Regents.  Open source Apache License, Version 2.
+Copyright 2009-2010 UC Regents.  Open source BSD license.
 
 =begin CPAN
 
