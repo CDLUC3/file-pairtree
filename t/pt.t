@@ -5,7 +5,7 @@ use warnings;
 
 my $script = 'pt';		# script we're testing
 
-# as of 2009.08.27  (SHELL stuff, remake_td, Config perlpath)
+# as of 2010.04.28  (SHELL stuff, remake_td, Config perlpath minus _exe)
 #### start boilerplate for script name and temporary directory support
 
 use Config;
@@ -15,7 +15,7 @@ my $td = "td_$script";		# temporary test directory named for script
 my $blib = (-e "blib" || -e "../blib" ?	"-Mblib" : "-Ilib");
 my $bin = ($blib eq "-Mblib" ?		# path to testable script
 	"blib/script/" : "") . $script;
-my $perl = $Config{perlpath} . $Config{_exe};	# perl used in testing
+my $perl = $Config{perlpath};		# perl used in testing
 my $cmd = "2>&1 $perl $blib " .		# command to run, capturing stderr
 	(-x $bin ? $bin : "../$bin") . " ";	# exit status in $? >> 8
 
@@ -52,7 +52,7 @@ like $x, qr|ab/c/|, "simple mknode";
 $x = `$cmd -d $td lstree`;
 is $?, 0, "status good on simple lstree";
 
-like $x, qr|abc\n1 object$|, "simple lstree with one node";
+like $x, qr|abc\n1 object\s*$|, "simple lstree with one node";
 
 remake_td();		# re-make temp dir
 
