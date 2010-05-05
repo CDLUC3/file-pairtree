@@ -60,11 +60,11 @@ DIRFILESEP = /
 DFSEP = $(DIRFILESEP)
 NAME = File::Pairtree
 NAME_SYM = File_Pairtree
-VERSION = 0.27
+VERSION = 0.28
 VERSION_MACRO = VERSION
-VERSION_SYM = 0_27
+VERSION_SYM = 0_28
 DEFINE_VERSION = -D$(VERSION_MACRO)=\"$(VERSION)\"
-XS_VERSION = 0.27
+XS_VERSION = 0.28
 XS_VERSION_MACRO = XS_VERSION
 XS_DEFINE_VERSION = -D$(XS_VERSION_MACRO)=\"$(XS_VERSION)\"
 INST_ARCHLIB = blib/arch
@@ -255,7 +255,7 @@ RCS_LABEL = rcs -Nv$(VERSION_SYM): -q
 DIST_CP = best
 DIST_DEFAULT = tardist
 DISTNAME = File-Pairtree
-DISTVNAME = File-Pairtree-0.27
+DISTVNAME = File-Pairtree-0.28
 
 
 # --- MakeMaker macro section:
@@ -495,7 +495,7 @@ metafile : create_distdir
 	$(NOECHO) $(ECHO) Generating META.yml
 	$(NOECHO) $(ECHO) '--- #YAML:1.0' > META_new.yml
 	$(NOECHO) $(ECHO) 'name:                File-Pairtree' >> META_new.yml
-	$(NOECHO) $(ECHO) 'version:             0.27' >> META_new.yml
+	$(NOECHO) $(ECHO) 'version:             0.28' >> META_new.yml
 	$(NOECHO) $(ECHO) 'abstract:            command and routines to manage pairtrees' >> META_new.yml
 	$(NOECHO) $(ECHO) 'license:             BSD' >> META_new.yml
 	$(NOECHO) $(ECHO) 'author:              ' >> META_new.yml
@@ -782,7 +782,7 @@ testdb_static :: testdb_dynamic
 # --- MakeMaker ppd section:
 # Creates a PPD (Perl Package Description) for a binary distribution.
 ppd :
-	$(NOECHO) $(ECHO) '<SOFTPKG NAME="$(DISTNAME)" VERSION="0,27,0,0">' > $(DISTNAME).ppd
+	$(NOECHO) $(ECHO) '<SOFTPKG NAME="$(DISTNAME)" VERSION="0,28,0,0">' > $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '    <TITLE>$(DISTNAME)</TITLE>' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '    <ABSTRACT>command and routines to manage pairtrees</ABSTRACT>' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '    <AUTHOR>John A. Kunze &lt;jak@ucop.edu&gt;</AUTHOR>' >> $(DISTNAME).ppd
