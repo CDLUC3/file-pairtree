@@ -3,6 +3,7 @@ use Test::More qw( no_plan );
 use strict;
 use warnings;
 
+use File::Pairtree;
 my $script = 'pt';		# script we're testing
 
 # as of 2010.05.02  (perlpath minus _exe, plus filval(), no -x for MSWin)
@@ -56,10 +57,15 @@ sub filval { my( $file, $value )=@_;	# $file must begin with >, <, or >>
 remake_td();
 my $x;
 
-$x = `$cmd -d $td mknode abc`;
-is $?, 0, "status good on simple mknode";
+$x = `$cmd -d $td mkbud abc`;
+is $?, 0, "status good on simple mkbud";
 
-like $x, qr|ab/c/|, "simple mknode";
+like $x, qr|ab/c/|, "simple mkbud";
+
+use File::Namaste;
+(undef, $x, undef) = File::Namaste::nam_get($td, 0);
+is $x, "$td/0=pairtree_$File::Pairtree::NVERSION",
+	"namaste dirtype tag created";
 
 $x = `$cmd -d $td lstree`;
 is $?, 0, "status good on simple lstree";
@@ -77,40 +83,44 @@ chop $x;
 
 like $x, qr|no such file or dir|, "complaint of non-existent tree";
 
-$x = `$cmd -d $td mknode prefixabc prefixdef prefixhigk`;
+$x = `$cmd -d $td mkbud prefixabc prefixdef prefixhigk`;
 like $x, qr|abc.*def.*higk.$|s, "make 3 nodes at once, prefix stripped";
 
-$x = `$cmd --dummy lsnode prefixdef`;
+$x = `$cmd --dummy lsbud prefixdef`;
 ok($? > 1, "status greater than 1 on bad option");
 
-$x = `$cmd -d $td lsnode prefixxyz prefixdef`;
-is $?>>8, 1, "status 1 on lsnode with at least one non-existent node";
+$x = `$cmd -d $td lsbud prefixxyz prefixdef`;
+is $?>>8, 1, "status 1 on lsbud with at least one non-existent node";
 
-$x = `$cmd -fd $td lsnode def`;
-is $?>>8, 2, "status 2 on lsnode of existing node, no prefix, but --force)";
+$x = `$cmd -fd $td lsbud def`;
+is $?>>8, 2, "status 2 on lsbud of existing node, no prefix, but --force)";
 
-$x = `$cmd -d $td lsnode def`;
-is $?, 0, "status good on lsnode of existing node, no prefix (no --force)";
+$x = `$cmd -d $td lsbud def`;
+is $?, 0, "status good on lsbud of existing node, no prefix (no --force)";
 
-$x = `$cmd -d $td lsnode prefixdef`;
-is $?, 0, "status good on lsnode of existing node (with prefix)";
+$x = `$cmd -d $td lsbud prefixdef`;
+is $?, 0, "status good on lsbud of existing node (with prefix)";
 
-$x = `$cmd -d $td rmnode prefixdef`;
-is $?, 0, "status good on rmnode of existing node (with prefix)";
+$x = `$cmd -d $td rmbud prefixdef`;
+is $?, 0, "status good on rmbud of existing node (with prefix)";
 
-$x = `$cmd -d $td rmnode prefixdummy`;
-is $?>>8, 1, "soft fail on rmnode of non-existing node (with prefix)";
+$x = `$cmd -d $td rmbud prefixdummy`;
+is $?>>8, 1, "soft fail on rmbud of non-existing node (with prefix)";
 
 remake_td();		# re-make temp dir
 
-$x = `$cmd -d $td mknode abc abcd abcde def ghi jkl`;
+$x = `$cmd -d $td mkbud abc abcd abcde def ghi jkl`;
 $x = `$cmd -d $td lstree`;
 like $x, qr/6 objects/, 'make and list 6 object tree, overlapping ids';
 
 my $R = 'pairtree_root';
-`date > $td/$R/ab/c/foo`;	# set up unencapsulated file error
-`mkdir $td/$R/de/f/fo`;		# set up shorty after morty error
-`mkdir $td/$R/gh/i/ghi2`;	# set up unencapsulated group error
+filval("> $td/$R/ab/c/foo", "content");	# set up unencapsulated file error
+mkdir "$td/$R/de/f/fo";			# set up shorty after morty error
+mkdir "$td/$R/gh/i/ghi2";		# set up unencapsulated group error
+# YYY!!! don't use `date ...` ever because on Windows it prompts user!
+#`date > $td/$R/ab/c/foo`;	# set up unencapsulated file error
+#`mkdir $td/$R/de/f/fo`;		# set up shorty after morty error
+#`mkdir $td/$R/gh/i/ghi2`;	# set up unencapsulated group error
 
 $x = `$cmd -d $td lstree`;
 like $x, qr/split end/s, 'detected split end';

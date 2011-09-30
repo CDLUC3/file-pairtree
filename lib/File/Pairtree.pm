@@ -5,24 +5,23 @@ use strict;
 use warnings;
 
 our $VERSION;
-$VERSION = sprintf "%d.%02d", q$Name: Release-0-28 $ =~ /Release-(\d+)-(\d+)/;
+#$VERSION = sprintf "%d.%02d", q$Name: Release-0-28 $ =~ /Release-(\d+)-(\d+)/;
+$VERSION = sprintf "%s", q$Name: Release-v0.304.0$ =~ /Release-(v\d+\.\d+\.\d+)/;
+our $NVERSION;			# pure numeric 2-part equivalent version
+($NVERSION = $VERSION) =~ s/v(\d+\.\d+)\.\d+/$1/;
 
 require Exporter;
 our @ISA = qw(Exporter);
 
-our @EXPORT = qw(
+our @EXPORT = qw();
+our @EXPORT_OK = qw(
 	id2ppath ppath2id s2ppchars id2pairpath pairpath2id
-	pt_lsnode pt_lstree pt_mknode pt_mktree pt_rmnode
-	pt_mkbud
-	up_dir get_prefix
+	pt_lsbud pt_lstree pt_mkbud pt_mktree pt_rmbud
+	pt_budstr get_prefix
 	$pfixtail
 	$pair $pairp1 $pairm1
 );
-# XXXX exporting way to much?
-
-our @EXPORT_OK = qw(
-	$pair $pairp1 $pairm1
-);
+our %EXPORT_TAGS = (all => [ @EXPORT_OK ]);
 
 our @EXPORT_FAIL = qw(
 	pair=1 pair=2 pair=3 pair=4 pair=5 pair=6 pair=7 pair=8 pair=9
@@ -86,22 +85,6 @@ my $P = $proper_ppath_re;
 # $pt_objid =~ s/(\"|\*|\+|,|<|=|>|\?|\^|\|)/sprintf("^%x", ord($1))/eg;
 # $pt_objid =~ tr/\/:./=+,/;
 # my $pt_prefix = $namespace."/pairtree_root/".join('/', $pt_objid =~ /..|.$/g);
-
-# ---------
-# Copyright 2008-2009 Regents of the University of California
-# 
-# Licensed under the Apache License, Version 2.0 (the "License"); you may
-# not use this file except in compliance with the License. You may obtain a
-# copy of the License at
-# 
-#         http://www.apache.org/licenses/LICENSE-2.0
-# 
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-# License for the specific language governing permissions and limitations
-# under the License. 
-# ---------
 
 # id2ppath - return /-terminated ppath corresponding to id
 # 
@@ -252,23 +235,15 @@ sub ppath2id{ my( $path, $pathcomp_sep )=@_;	# single arg form, second
 }
 
 use Carp;
+use File::Spec;
 use File::Find;
 use File::Path;
-use File::Value;
-use File::ANVL;
+use File::Namaste qw( nam_add );
+use File::Value ':all';
 use File::Glob ':glob';		# standard use of module, which we need
 				# as vanilla glob won't match whitespace
 
-# Return parent with trailing slash intact.
-#
-sub up_dir { ( $_ )=@_;
-
-	return "/"		if m,^/+$,;
-	return "./"		if m,^\./*$,;
-	s,[^/]+/*$,,;
-	return "./"		if m,^$,;
-	return $_;
-}
+our $Win;			# whether we're running on Windows
 
 my $pfixtail = 'pairtree_prefix';
 
@@ -288,15 +263,16 @@ sub get_prefix { my( $parent_dir )=@_;
 # return 0 on success, 1 on soft fail, >1 on hard fail
 # xxxxxxxxx get consistent on these return codes/croaks
 #
-sub pt_lsnode { my( $dir, $id, $r_opt )=@_;
+sub pt_lsbud { my( $dir, $id, $r_opt )=@_;
 
 	$dir		or croak "no dir or empty dir";
 	$id		or croak "no id or empty id";
 	ref($r_opt) eq "HASH" or
 		croak "r_opt must reference a hash (for input/output)";
 
+	$dir = fiso_dname($dir, $R);	# make sure we have descender
 	my $parent_dir = $$r_opt{parent_dir}
-		|| up_dir($dir);
+		|| fiso_uname($dir);
 	my $prefix = $$r_opt{prefix}
 		|| get_prefix($parent_dir);
 
@@ -361,7 +337,11 @@ sub pt_lstree { my( $tree, $r_opt, $r_visit_node, $r_wrapup )=@_;
 	#ref( $r_wrapup ||= \&pt_lstree_wrapup ) eq "CODE" or
 	#	croak "r_wrapup must reference a node-visiting function";
 
-	$$r_opt{parent_dir} ||= up_dir($tree);
+	defined($Win) or	# if we're on a Windows platform avoid -l
+		$Win = grep(/Win32|OS2/i, @File::Spec::ISA);
+
+	$tree = fiso_dname($tree, $R);	# make sure we have descender
+	$$r_opt{parent_dir} ||= fiso_uname($tree);
 	$$r_opt{prefix} ||= get_prefix($$r_opt{prefix});
 
 	$gr_opt = $r_opt;	# make options available to find
@@ -387,9 +367,9 @@ sub pt_lstree { my( $tree, $r_opt, $r_visit_node, $r_wrapup )=@_;
 	return $ret;
 }
 
-# Create the bud that will encapsulate the leaf node
+# Create the bud string that will encapsulate the leaf node
 #
-sub pt_mkbud { my( $id, $bud_style )=@_;
+sub pt_budstr { my( $id, $bud_style )=@_;
 
 	# Xxx add chars if less than $pair chars in $_
 	$id ||= "";
@@ -409,15 +389,16 @@ sub pt_mkbud { my( $id, $bud_style )=@_;
 	return s2ppchars($id);
 }
 
-sub pt_mknode { my( $dir, $id, $r_opt )=@_;
+sub pt_mkbud { my( $dir, $id, $r_opt )=@_;
 
 	$dir		or croak "no dir or empty dir";
 	$id		or croak "no id or empty id";
 	ref($r_opt) eq "HASH" or
 		croak "r_opt must reference a hash (for input/output)";
 
+	$dir = fiso_dname($dir, $R);	# make sure we have descender
 	my $parent_dir = $$r_opt{parent_dir}
-		|| up_dir($dir);
+		|| fiso_uname($dir);
 	my $prefix = $$r_opt{prefix}
 		|| get_prefix($parent_dir);
 
@@ -430,16 +411,16 @@ sub pt_mknode { my( $dir, $id, $r_opt )=@_;
 
 	-d $dir or			# need to create base directory
 		pt_mktree($dir, "", $r_opt) and		# if error
-		($$r_opt{msg} = "pt_mknode: $$r_opt{msg}"),
+		($$r_opt{msg} = "pt_mkbud: $$r_opt{msg}"),
 		return 1;		# return after adding our stamp
 	my $ppath = $parent_dir . id2ppath($id);
-	my $bud = $ppath . pt_mkbud($id, $$r_opt{bud_style});
+	my $bud = $ppath . pt_budstr($id, $$r_opt{bud_style});
 
 	my $ret;
 	eval { $ret = mkpath($bud) };
 	$@		and croak "Couldn't create $bud: $@";
 	if ($ret == 0) {
-		croak "pt_mknode: mkpath returned '0' for $bud"
+		croak "pt_mkbud: mkpath returned '0' for $bud"
 			unless -e $bud;
 		$$r_opt{msg} = "error: $bud ($id) already exists\n";
 		return 0;
@@ -449,8 +430,6 @@ sub pt_mknode { my( $dir, $id, $r_opt )=@_;
 
 	return 1;
 }
-
-use File::Namaste;
 
 sub pt_mktree { my( $dir, $prefix, $r_opt )=@_;
 
@@ -462,7 +441,8 @@ sub pt_mktree { my( $dir, $prefix, $r_opt )=@_;
 		croak "r_opt must reference a hash (for input/output)";
 			# except that we ignore any r_opt inputs here
 
-	my $parent_dir = up_dir($dir);
+	$dir = fiso_dname($dir, $R);	# make sure we have descender
+	my $parent_dir = fiso_uname($dir);
 	my $ret;
 	eval { $ret = mkpath($dir) };
 	if ($@) {
@@ -482,22 +462,26 @@ sub pt_mktree { my( $dir, $prefix, $r_opt )=@_;
 		$$r_opt{msg} = "$pxfile: $msg";
 		return 1;
 	}
-	$msg = nam_set($dir, undef, '0', "pairtree_$VERSION");
-	# xxxx croak or return via r_opt{msg}
 	$msg		and croak "Couldn't create namaste tag in $dir: $msg";
+	$msg = nam_add($parent_dir, undef, '0', "pairtree_$NVERSION", 0);
+		# yyy better to use 0 to mean "don't truncate"
+		#length("pairtree_$VERSION"));
+	# xxxx croak or return via r_opt{msg}
+	$msg	and croak "Couldn't create namaste tag in $parent_dir: $msg";
 
 	return 0;
 }
 
-sub pt_rmnode { my( $dir, $id, $r_opt )=@_;
+sub pt_rmbud { my( $dir, $id, $r_opt )=@_;
 
 	$dir		or croak "no dir or empty dir";
 	$id		or croak "no id or empty id";
 	ref($r_opt) eq "HASH" or
 		croak "r_opt must reference a hash (for input/output)";
 
+	$dir = fiso_dname($dir, $R);	# make sure we have descender
 	my $parent_dir = $$r_opt{parent_dir}
-		|| up_dir($dir);
+		|| fiso_uname($dir);
 	my $prefix = $$r_opt{prefix}
 		|| get_prefix($parent_dir);
 
@@ -522,7 +506,7 @@ sub pt_rmnode { my( $dir, $id, $r_opt )=@_;
 	my $ret;
 	eval { $ret = rmtree($ppath) };
 	if ($@) {
-		$$r_opt{msg} = "Couldn't create $ppath tree: $@";
+		$$r_opt{msg} = "Couldn't remove $ppath tree: $@";
 		return 1;
 	}
 	if ($ret == 0) {
@@ -605,7 +589,7 @@ sub pt_visit_node {	# receives no args
 	# If we follow symlinks (usual), we have to expect the -l type,
 	# which hides the type of the link target (what we really want).
 	#
-	if (-l _) {
+	if (! $Win and -l _) {
 		$symlinkcount++;
 		print "XXXX SYMLINK $_\n";
 		# yyy presumably this branch never happens when
@@ -695,11 +679,11 @@ File::Pairtree - routines to manage pairtrees
  ppath2id($path);              # returns id corresponding to $path
  ppath2id($path, $separator);  # if you want an alternate separator char
 
+ pt_budstr();
  pt_mkbud();
- pt_mknode();
  pt_mktree();
- pt_rmnode();
- pt_lsnode();
+ pt_rmbud();
+ pt_lsbud();
 
 =head1 DESCRIPTION
 
@@ -707,7 +691,7 @@ This is very brief documentation for the B<Pairtree> Perl module.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright 2008-2010 UC Regents.  Open source BSD license.
+Copyright 2008-2011 UC Regents.  Open source BSD license.
 
 =cut
 
@@ -950,7 +934,7 @@ sub visit{	# receives no args
 	# If we get here, the stack top's pp is the same as our parent
 	# (or it's empty because we're at our first node ever).
 	#
-	if (-l _) {
+	if (! $Win and -l _) {
 		print "XXXX SYMLINK $_\n";
 		# XXX what does this branch do when _not_ following links?
 		($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $sze)

@@ -1,86 +1,358 @@
-#!/bin/sh
-#! -*- perl -*-
-eval 'exec perl -x -S $0 ${1+"$@"} ;'
-	if 0;
-# The above make for portable Perl startup honoring PATH and emacs.  Don't
-# change lightly.  Options may be inserted before "-x".  For background see
-# 'perldoc perlrun' and http://cr.yp.to/slashpackage/studies/findingperl/7 .
-# For development consider:  alias tp='perl -x -Mblib', eg, tp foo t/foo.t
+package File::Pairtree;
 
+use 5.006;
 use strict;
 use warnings;
 
-# xxx support for shadow tree of deletions? pairtree_trash?
+our $VERSION;
+#$VERSION = sprintf "%d.%02d", q$Name: Release-0-28 $ =~ /Release-(\d+)-(\d+)/;
+$VERSION = sprintf "%s", q$Name: Release-v0.304.0$ =~ /Release-(v\d+\.\d+\.\d+)/;
 
-=for roff
-.nr PS 12p
-.nr VS 14.4p
+require Exporter;
+our @ISA = qw(Exporter);
 
-=head1 NAME
+our @EXPORT = qw();
+our @EXPORT_OK = qw(
+	id2ppath ppath2id s2ppchars id2pairpath pairpath2id
+	pt_lsnode pt_lstree pt_mknode pt_mktree pt_rmnode
+	pt_mkbud
+	get_prefix
+	$pfixtail
+	$pair $pairp1 $pairm1
+);
+our %EXPORT_TAGS = (all => [ @EXPORT_OK ]);
 
-pt - pairtree manipulation commands
+our @EXPORT_FAIL = qw(
+	pair=1 pair=2 pair=3 pair=4 pair=5 pair=6 pair=7 pair=8 pair=9
+);
+push @EXPORT_OK, @EXPORT_FAIL;		# add pseudo-symbols we will trap
 
-=head1 SYNOPSIS
+#our @EXPORT = qw(
+#	id2ppath ppath2id s2ppchars id2pairpath pairpath2id
+#	pt_lsnode pt_lstree pt_mknode pt_mktree pt_rmnode
+#	pt_mkbud
+#	get_prefix
+#	$pfixtail
+#	$pair $pairp1 $pairm1
+#);
 
-=over
+# This is a magic routine that the Exporter calls for any unknown symbols.
+# We use it to permit export of pseudo-symbols "pair=1", "pair=2", ...,
+# "pair=9" so the caller can define a pair to mean 1, 2, ..., or 9 octets.
+#
+sub export_fail { my( $class, @symbols )=@_;
 
-=item B<pt> [B<-dfmvh>] [B<mktree>] I<directory> [I<prefix>]
+	my @unknowns;
+	for (@symbols) {
+		! s/^pair=([1-9])$/$1/ and
+			push(@unknowns, $_),
+			next;
+		pair_means($_);		# define how many octets form a pair
+	}
+	return @unknowns;
+}
 
-=item B<pt> [B<-dlfmvh>] [B<rmtree | lstree>] [I<directory>] ...
+# xxx Config?
+my $default_pathcomp_sep = '/';
 
-=item B<pt> [B<-dlfmvh>] [B<mknode | rmnode | lsnode>] I<id> ...
+# In case we want to experiment with different cardinality of "pair",
+# eg, 3 chars, 1 char, 4 chars.  This is mostly untested. XXX
+# 
+our ($pair, $pairp1, $pairm1);
 
-=item B<pt> [B<-lfmvh>] [B<i2p | p2i>] I<name> ...
+sub pair_means{ my( $n )=@_;
 
-=back
+	die "the number meant by 'pair' must be a positive integer"
+		if ($n < 1);
+	$pair = $n;
+	$pairp1 = $pair + 1;
+	$pairm1 = $pair - 1;	# xxx what if $pairm1 is zero?
+	return 1;
+}
+# XXXXXXXX arrange to call this at compile time?? punish the user if
+#  they call it themselves???
 
-=head1 DESCRIPTION
+# If not done so on import, define now how many octets in a pair.
+#
+defined($pair)		or pair_means(2);
+#
+# Now it's safe to define compiled regexps based on
+# constant values for $pair, $pairp1, and $pairm1.
 
-The B<pt> command introduces (sub)commands that can be used to create,
-delete, modify, and report on a pairtree.  When not made explicit via
-an argument (see the first two forms above), the pairtree in question
-is assumed to reside in a F<pairtree_root/> directory descending from
-the current directory or from a directory specified with B<-d>.
+# this regexp matches a valid base ppath with bud attached
+our $proper_ppath_re = "([^/]{$pair}/)*[^/]{1,$pair}";
+our $root = "pairtree_root";
 
-The first form creates a pairtree, recording an optional prefix that
-will be stripped from an identifier before mapping it to a pairpath
-and prepended to an identifier generated from a pairpath.
+my $R = $root;
+my $P = $proper_ppath_re;
 
-The second form deletes or lists an entire tree of nodes and the third
-form creates, deletes, or tests the existence of a node.  If B<-l> is
-also given, more detailed listings are produced for B<lstree> or
-B<lsnode>.
+# Pairtree - Pairtree support software (Perl module)
+# 
+# Author:  John A. Kunze, jak@ucop.edu, California Digital Library, 2008
+#          based on three lines of code originally from Sebastien Korner:
+# $pt_objid =~ s/(\"|\*|\+|,|<|=|>|\?|\^|\|)/sprintf("^%x", ord($1))/eg;
+# $pt_objid =~ tr/\/:./=+,/;
+# my $pt_prefix = $namespace."/pairtree_root/".join('/', $pt_objid =~ /..|.$/g);
 
-The third form permits access to the purely lexical lower level
-conversion between identifiers and pairpaths, independent of any
-existing pairtree.
+# ---------
+# Copyright 2008-2009 Regents of the University of California
+# 
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain a
+# copy of the License at
+# 
+#         http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License. 
+# ---------
 
-=head1 EXAMPLES
+# id2ppath - return /-terminated ppath corresponding to id
+# 
+# For Perl, the platform's path component separator ('/' or '\') is
+# automagically converted when needed to do filesystem things; in fact,
+# trying to use the correct separator can get you into trouble.  So we
+# make it possible to specify the path component separator, but we won't
+# do it for you.  Instead we assume '/'.
+#
+# The return path starts with /pairtree_root to encourage good habits --
+# this could backfire.  We use the symbol 'pathcomp_sep' because
+# 'path_sep' is already taken by the Config module to designate the
+# character that separates entire pathnames, eg, ':' in the PATH
+# environment variable.
+#
+# XXXXX this $pathcomp_sep -- is it worth a variable or is it better to
+# let it be constant so we can compile the regexp?
+sub id2ppath{ my( $id, $pathcomp_sep )=@_;	# single arg form, second
+						# arg not advertized
 
-=cut
+	$pathcomp_sep ||= $default_pathcomp_sep;
+#	$id =~ s{
+#		(["*+,<=>?\\^|]			# some visible ASCII and
+#		 |[^\x21-\x7e])			# all non-visible ASCII
+#	}{
+#		sprintf("^%02x", ord($1))	# replacement hex code
+#	}xeg;
+#
+#	# Now do the single-char to single-char mapping.
+#	# The / translated next is not to be confused with $pathcomp_sep.
+#	#
+#	$id =~ tr /\/:./=+,/;			# per spec, /:. become =+,
 
-my $VERSION;
-$VERSION = sprintf "%d.%02d", q$Revision: 0.01 $ =~ /(\d+)/g;
+	$id = s2ppchars($id, $pathcomp_sep);
 
-# this :config allows -h24w80 for '‐h 24 ‐w 80', -vax for --vax or --Vax
-use Getopt::Long qw(:config bundling_override);
+	return $root
+		. $pathcomp_sep
+		. join($pathcomp_sep, $id =~ /.{1,$pair}/g)
+		. $pathcomp_sep;
+		# . join($pathcomp_sep, $id =~ /..|.$/g)
+}
 
-use Pod::Usage;
+sub s2ppchars{ my( $s, $pathcomp_sep )=@_;
 
-#XXXX
-#use File::Pairtree qw( $pair $pairp1 $pairm1 );
-use File::Pairtree;
-use File::Path qw( mkpath );	# don't import rmtree, which we want to define
+	$pathcomp_sep ||= $default_pathcomp_sep;
+	$s =~ s{
+		(["*+,<=>?\\^|]			# some visible ASCII and
+		 |[^\x21-\x7e])			# all non-visible ASCII
+	}{
+		sprintf("^%02x", ord($1))	# replacement hex code
+	}xeg;
 
-#XXXX move to module
+	# Now do the single-char to single-char mapping.
+	# The / translated next is not to be confused with $pathcomp_sep.
+	#
+	$s =~ tr /\/:./=+,/;			# per spec, /:. become =+,
+	return $s;
+}
+
+# XXX ditch 2-arg forms?
+# This 2-arg form exists for parallelism with other language interfaces
+# (that don't may not have optional arguments).  Perl users would
+# normally prefer the id2ppath form for full functionality and speed.
+# 
+sub id2pairpath{ my( $id, $pathcomp_sep )=@_;	# two-argument form
+
+	return id2ppath($id, $pathcomp_sep);
+}
+
+# ppath2id - return id corresponding to ppath, or string of the form
+#		"error: <msg>"
+# There is more error checking required for ppath2id than id2ppath,
+# as the domain is more constrained.
+#
+sub ppath2id{ my( $path, $pathcomp_sep )=@_;	# single arg form, second
+						# arg not advertized
+	my $id = $path;			# initialize $id with $path
+	my $p = $pathcomp_sep || $default_pathcomp_sep;
+
+	my $expect_hexenc;		# chars expected to be hex encoded
+	if ($p eq '\\') {		# \ is a common, problemmatic case
+		$expect_hexenc = '"*<>?|';	# don't need to encode \ 
+		$p = '\\\\';		# and double escape for use in regex
+	} else {
+		$expect_hexenc = '"*<>?|\\\\';	# do need to encode \ 
+	}
+
+	# Trim everything from the beginning up to the last instance of
+	# $root (via a greedy match).  If there's a pairpath to the right
+	# of a given pairpath, assume that the most fine grained path
+	# (rightmost) is the one the user's interested in.
+	#
+	$id =~ s/^.*$root//;
+
+	# Normalize so there's no initial or final whitespace, no
+	# repeated $pathcomp_sep chars, and exactly one $pathcomp_sep
+	# at the beginning and end.
+	#
+	$id =~ s/^\s*/$p/;
+	$id =~ s/\s*$/$p/;
+	$id =~ s/$p+/$p/g;
+
+	# Also trim any final junk, eg, anpath extension that is really
+	# internal to an object directory.
+	#
+	$id =~ s/[^$p]{$pairp1,}.*$//;	# trim final junk
+
+	# Finally, trim anything that follows a one-char path component,
+	# a one-char component being another signal of the end of a ppath.
+	# In a general sense, "one" here really means "one less than the
+	# number of chars in a 'pair'".
+	#
+	$id =~ s/($p([^$p]){1,$pairm1}$p).*$/$1/;   # trim after 1-char comp.
+
+	# Reject if there are any non-visible chars.
+	#
+	return "error: non-visible chars in $path" if
+		$id =~ /[^\x21-\x7e]/;
+
+	# Reject if there are any other chars that should be hex-encoded.
+	#
+	return "error: found chars expected to be hex-encoded in $path" if
+		$id =~ /[$expect_hexenc]/;
+
+	# Now remove the path component separators.
+	#
+	$id =~ s/$p//g;
+
+	# Reverse the single-char to single-char mapping.
+	# This might add formerly hex-encoded chars back in.
+	#
+	$id =~ tr /=+,/\/:./;		# per spec, =+, become /:.
+
+	# Reject if there are any ^'s not followed by two hex digits.
+	#
+	return "error: impossible hex-encoding in $path" if
+		$id =~ /\^($|.$|[^0-9a-fA-F].|.[^0-9a-fA-F])/;
+
+	# Now reverse the hex conversion.
+	#
+	$id =~ s{
+		\^([0-9a-fA-F]{2})
+	}{
+		chr(hex("0x"."$1"))
+	}xeg;
+
+	return $id;
+}
+
+use Carp;
+use File::Spec;
+use File::Find;
+use File::Path;
+#use File::ANVL;
+use File::Namaste qw( nam_add );
+use File::Value ':all';
+use File::Glob ':glob';		# standard use of module, which we need
+				# as vanilla glob won't match whitespace
+
+## Return parent with trailing slash intact.
+##
+#sub up_dir { ( $_ )=@_;
+#
+#	return "/"		if m,^/+$,;
+#	return "./"		if m,^\./*$,;
+#	s,[^/]+/*$,,;
+#	return "./"		if m,^$,;
+#	return $_;
+#}
+
+our $Win;			# whether we're running on Windows
+
 my $pfixtail = 'pairtree_prefix';
-my $prefix;			# need this global to talk to lstree/find
 
-my ($dir, $R, $P);
-# This matches the base ppath in 'perl'.
-# xxx define these as compiled regexps in Pairtree.pm
-$R = $File::Pairtree::root;
-$P = "([^/]{$pair}/)*[^/]{1,$pair}";
+# Return empty string unless we find a prefix value.
+sub get_prefix { my( $parent_dir )=@_;
+
+	my $prefix = "";
+	my $pxfile = $parent_dir . $pfixtail;
+	return $prefix			unless -e $pxfile;
+	my $msg = file_value("< $pxfile", $prefix);
+	die "$pxfile: $msg"		if $msg;
+	return $prefix;
+}
+
+# caller can define inputs $$r_opt{prefix} and $$r_opt{parent_dir} for speed
+# we return under keys: msg, ppath, bud
+# return 0 on success, 1 on soft fail, >1 on hard fail
+# xxxxxxxxx get consistent on these return codes/croaks
+#
+sub pt_lsnode { my( $dir, $id, $r_opt )=@_;
+
+	$dir		or croak "no dir or empty dir";
+	$id		or croak "no id or empty id";
+	ref($r_opt) eq "HASH" or
+		croak "r_opt must reference a hash (for input/output)";
+
+	my $parent_dir = $$r_opt{parent_dir}
+		|| fiso_uname($dir);
+	my $prefix = $$r_opt{prefix}
+		|| get_prefix($parent_dir);
+
+	# prefix substitution is optional unless -f ??? XXXXX
+	# xxx test
+	$prefix and ! ($id =~ s/^$prefix//) and $$r_opt{force} and
+		($$r_opt{msg} = "no prefix present in: $id"),
+		return 2;
+
+	my $ppath = $parent_dir . id2ppath($id);
+	-e $ppath or
+		($$r_opt{msg} = "non-existent ppath ($ppath)"),
+		($$r_opt{ppath} = ""),
+		return 1;		# softer failure than return 2
+	$$r_opt{ppath} = $ppath;
+
+	# Now that we have a valid ppath, we still don't know what
+	# the encapsulating directory (or anything else for that
+	# matter) looks like, so we use glob to look for things.
+	# Recall that $ppath ends in a '/' (from id2ppath).
+	# xxx sepchar better than / ?
+	#
+	my @buds = grep ! m{(^|/)\.\.?$},	# except for . and ..
+		bsd_glob($ppath . "{*,.*}");	# look for all files
+	my $nbuds = scalar @buds;		# how many buds?
+	$nbuds == 0 and				# empty ppath, not a node
+		($$r_opt{msg} = "no bud: $ppath"),
+		($$r_opt{bud} = ""),
+		return 2;
+
+	# If we get here, there's one or more things at end of ppath.
+	#
+	$nbuds > 1 and
+		($$r_opt{msg} = "expected one bud but got $nbuds buds"),
+		($$r_opt{bud} = join " ", @buds),
+		return 2;
+
+	# If we get here, only one thing at end of ppath (the common case).
+	#
+	$$r_opt{bud} = shift @buds;
+
+	# XXXXX  ??? $$r_opt{oxum},  $$r_opt{details} ?  $$r_opt{long}
+	#        ? $$r_opt{all}
+	return 0;
+}
 
 my $objectcount = 0;		# number of objects encountered
 my $filecount = 0;		# number of files encountered xxx
@@ -88,344 +360,195 @@ my $dircount = 0;		# number of directories encountered xxx
 my $symlinkcount = 0;		# number of symlinks encountered xxx
 my $irregularcount = 0;		# non file, non dir fs items to report xxx
 
-use constant OM_ANVL => 1;
+my $gr_opt;	# global version of r_opt to communicate with find
 
-my %opt = (
-	bud		=> 0,
-	directory	=> 0,
-	force		=> 0,
-	format		=> 0,
-	help		=> 0,
-	long		=> 0,
-	man		=> 0,
-	version		=> 0,
-	verbose		=> 0,
-);
+sub pt_lstree { my( $tree, $r_opt, $r_visit_node, $r_wrapup )=@_;
 
-# main
-{
-	GetOptions(\%opt,
-		'bud|b=s',
-		'directory|d=s',
-		'force|f',
-		'format|m=s',		# xxx not implemented yet
-		'help|?',
-		'long|l',
-		'man',
-		'version',
-		'verbose|v',
-	) or pod2usage(1);
+	$tree		or croak "no tree dir or empty tree dir";
+	ref($r_opt) eq "HASH" or
+		croak "r_opt must reference a hash (for input/output)";
+	ref( $r_visit_node ||= \&pt_visit_node ) eq "CODE" or
+		croak "r_visit_node must reference a node-visiting function";
+	#ref( $r_wrapup ||= \&pt_lstree_wrapup ) eq "CODE" or
+	#	croak "r_wrapup must reference a node-visiting function";
 
-	pod2usage(1)
-		if $opt{help};
-	pod2usage(-exitstatus => 0, -verbose => 2)
-		if $opt{man};
-	print "$VERSION\n" and exit(0)
-		if $opt{version};
+	defined($Win) or	# if we're on a Windows platform avoid -l
+		$Win = grep(/Win32|OS2/i, @File::Spec::ISA);
 
-	my $subcmd = shift @ARGV;
-	pod2usage("$0: no sub-command given")
-		unless defined $subcmd;
-	$subcmd = lc $subcmd;
-	pod2usage("$0: unknown sub-command: $subcmd")
-		unless defined(&$subcmd);	# is it a defined function?
+	$$r_opt{parent_dir} ||= fiso_uname($tree);
+	$$r_opt{prefix} ||= get_prefix($$r_opt{prefix});
 
-	# Which pairtree?
-	#
-	$dir = $opt{directory} || ".";
-	$dir = prep_file($dir, $R);
+	$gr_opt = $r_opt;	# make options available to find
+	my %find_opt = (
+		'wanted'	=>  $r_visit_node,
+		'follow_fast'	=>  $$r_opt{follow_fast},
+	);
 
-	no strict 'refs';		# permits the next call
-	&$subcmd(@ARGV);
-	# XXX exit status?
-}
+	#print "Id      Oxum\n";		# XXXXXX this is our r_startup
 
-# Prepare base path with last component according to the table, normalizing
-# multiple slashes between $base and $last.  Useful to get tedious details
-# right and when path may already have the last component on it (in which
-# case we don't want it there twice).  Removes final slashes from $last.
-#
-# 	$base		$last		Returns
-#  1.	/		bar		/bar
-#  2.	.		bar		bar
-#  3.	foo		bar		foo/bar
-#  4.	foo/		bar		foo/bar
-#  5.	foo/bar		bar		foo/bar
-#  6.	bar		bar		bar
-#
-# xxx may not port to Windows due to use of explicit slashes (/)
-# XXXXXX probably should use File::Spec
-# xxx do some test cases for this
-# xxx find a better name
-sub prep_file { my( $base, $last )=@_;
+	my $ret = find(\%find_opt, $tree);
 
-	$last =~ s{/*(.*)/*$}{$1};	# remove bounding slashes
-	return "/$last"		if $base =~ m{^/+$};	# case 1 eliminated
-	$base =~ s{/+$}{};		# remove trailing slashes
-	return "$last"		if $base =~ m{^\./+$};	# case 2 eliminated
-	return "$base/$last"	if $base !~ m{$last$};	# cases 3-4 gone
-	return "$last"		if $base =~ m{^$last$};	# case 6 eliminated
-	$base =~ s{/*$last$}{};		# remove $last and preceding slashes
-	return "$base/$last";				# case 5 eliminated
-}
+	# XXXXX this is our r_wrapup
+	# Dummy call to pt_newobj() to cough up the last buffered object.
+	pt_newobj("", 0, 0, 0);			# shake out the last one
+	# XXX what does find return?
+	#print "lstree: find returned '$ret' for $tree"		if $ret;
+	$gr_opt->{om}->elem('lstree', "find returned '$ret' for $tree")	if $ret;
+	#print "$objectcount object", ($objectcount == 1 ? "" : "s"), "\n";
+	$gr_opt->{om}->elem('objectcount', "$objectcount object" .
+		($objectcount == 1 ? "" : "s"));
 
-# Return parent with trailing slash intact.
-#
-sub up_dir { ( $_ )=@_;
-
-	return "/"		if m,^/+$,;
-	return "./"		if m,^\./*$,;
-	s,[^/]+/*$,,;
-	return "./"		if m,^$,;
-	return $_;
-}
-
-use File::Value;
-
-# Return empty string unless we find a prefix value.
-sub get_prefix { my( $pdir )=@_;
-
-	my $prefix = "";
-	my $pxfile = $pdir . $pfixtail;
-	return $prefix			unless -e $pxfile;
-	my $msg = file_value("< $pxfile", $prefix);
-	die "$pxfile: $msg"		if $msg;
-	return $prefix;
+	return $ret;
 }
 
 # Create the bud that will encapsulate the leaf node
 #
-sub bud { my( $bud )=@_;
+sub pt_mkbud { my( $id, $bud_style )=@_;
 
 	# Xxx add chars if less than $pair chars in $_
-	$bud ||= "";
-	! $bud and				# valid but empty id/ppath
+	$id ||= "";
+	! $id and				# valid but empty id/ppath
 		return "supernode";
+	$bud_style ||= 0;			# xxx
 
-	my $n = length($bud) - 1;
+	my $n = length($id) - 1;
 	$n < $pair and				# pad on left with zeroes
-		$bud = ("0" x ($pair - $n)) . $bud;
+		$id = ("0" x ($pair - $n)) . $id;
 
 	# xxx optional variation on endings
-	$opt{bud} == 0 and			# "full"
-		return s2ppchars($bud);
+	$bud_style == 0 and			# "full"
+		return s2ppchars($id);
 	#or			# XXX no other possibility right now
 	;
-	return s2ppchars($bud);
+	return s2ppchars($id);
 }
 
-#######################
-#
-# Now for the sub-command functions.
-#
+sub pt_mknode { my( $dir, $id, $r_opt )=@_;
 
-use File::Glob ':glob';		# standard use of module, which we need
-				# as vanilla glob won't match whitespace
-use File::Find;
+	$dir		or croak "no dir or empty dir";
+	$id		or croak "no id or empty id";
+	ref($r_opt) eq "HASH" or
+		croak "r_opt must reference a hash (for input/output)";
 
-sub help { my( $topic )=@_;
+	my $parent_dir = $$r_opt{parent_dir}
+		|| fiso_uname($dir);
+	my $prefix = $$r_opt{prefix}
+		|| get_prefix($parent_dir);
 
-	$topic ||= "";
-	return print "XXX place holder for help on $topic\n";
-}
+	# prefix substitution is optional unless -f
+	$prefix and ! ($id =~ s/^$prefix//) and $$r_opt{force} and
+		($$r_opt{msg} = "no prefix present in: $id"),
+		return 0;
+	$id !~ m/^\s*$/ or		# double check that we won't xxx?
+		croak "bad node";	# create a malformed pairtree
 
-sub lsnode { my( @nodes )=@_;
+	-d $dir or			# need to create base directory
+		pt_mktree($dir, "", $r_opt) and		# if error
+		($$r_opt{msg} = "pt_mknode: $$r_opt{msg}"),
+		return 1;		# return after adding our stamp
+	my $ppath = $parent_dir . id2ppath($id);
+	my $bud = $ppath . pt_mkbud($id, $$r_opt{bud_style});
 
-	# Don't allow empty node, especially for delnode, which could
-	# result in a disastrous rmtree against the entire pairtree.
-	#
-	die "lsnode: no node"		unless scalar(@nodes);
-
-	my $pdir = up_dir($dir);	# parent directory
-	$prefix = get_prefix($pdir);
-	my ($pp, $ret);
-	for (@nodes) {
-		s/^$prefix//;
-		$pp = $pdir . id2ppath($_);
-		! -e $pp and
-			($ret = print "No such node: $pp\n"),
-			next;
-
-		# Now we have a valid ppath, but we don't know what the
-		# encapsulating directory (or anything else for that
-		# matter) looks like, so we glob around for things.
-		# Recall that $pp ends in a '/' (from id2ppath).
-		#
-		my @in = bsd_glob("$pp*");		# anything visible
-		push @in, bsd_glob("$pp.??*");		# of interest
-		! scalar @in and	# an empty ppath is just echoed
-			($ret = print "$pp\n"),
-			next;
-
-		# If we get here, there's at least one thing at the end of
-		# of the ppath.  Print the first one normally; anything
-		# else is indented and is likely an encapsulation error.
-		# xxx should that be flagged somehow?
-		#
-		$ret = print shift @in, "\n";
-		$ret = print "   $_\n"		for (@in);
-	}
-	return $ret;
-}
-
-sub lstree { my( $tree )=@_;
-
-	$tree ||= $dir;
-	! -e $tree	and die "$tree: no such file or directory";
-
-	my $pdir = up_dir($dir);	# parent directory
-	$prefix = get_prefix($pdir);
-
-	my $follow_fast = 1;	# follow symlinks without rigorous
-		# checking; also means that (-X _) works without stat
-
-	my $ret = find(
-		{ wanted => \&visit, follow_fast => $follow_fast },
-		$tree
-	);
-	# Dummy call to newptobj() to cough up the last buffered object.
-	newptobj("", 0, 0, 0);			# shake out the last one
-
-	# XXX what does find return?
-	print "lstree: find returned '$ret' for $tree"		if $ret;
-	# XXX call om*
-	print "$objectcount object", ($objectcount == 1 ? "" : "s"), "\n";
-	return $ret;
-}
-
-sub mknode { my( @nodes )=@_;
-
-	# Don't allow empty node, especially for delnode, which could
-	# result in a disastrous rmtree against the entire pairtree.
-	#
-	die "mknode: no node"		unless scalar(@nodes);
-
-	my $pdir = up_dir($dir);	# parent directory
-	$prefix = get_prefix($pdir);
-	my ($pp, $ret);
-	for (@nodes) {
-		s/^$prefix//;
-		$pp = id2ppath($_);
-		# double check that we won't create a bad pairtree
-		die "bad node: $_"			if m,$R/*$,;
-		$pp = $pdir . $pp . bud($_);
-		eval { $ret = mkpath($pp) };
-		die "Couldn't create $pp: $@"		if $@;
-		if ($ret == 0) {
-			! -e $pp and
-				die("mknode: mkpath returned '0' for $pp");
-			print "error: $pp ($_) already exists\n";
-			next;
-		}
-		# XXX should do anvls quoting
-		$opt{format} == OM_ANVL and
-			print("node: $_ | $pp\n")
-		or
-			print($pp, "\n")
-		;
-	}
-	return $ret;
-}
-
-sub mktree { my( $tree, $prefix )=@_;
-
-	$tree ||= $dir;			# use default, but only if the
-	$tree = prep_file($tree, $R)	# tree wasn't given explicitly
-		if ($tree ne $dir);
-	my $pdir = up_dir($tree);	# parent directory
 	my $ret;
-	eval { $ret = mkpath($tree) };
-	die "Couldn't create $tree: $@"			if $@;
-	die "mktree: mkpath returned '$ret' for $tree"	if ! $ret;
-
-	$prefix ||= "";
-	my $pxfile = $pdir . $pfixtail;
-	my $msg = file_value("> $pxfile", $prefix)
-		if ($prefix);
-	if ($msg) {
-		print "$pxfile: $msg\n";
+	eval { $ret = mkpath($bud) };
+	$@		and croak "Couldn't create $bud: $@";
+	if ($ret == 0) {
+		croak "pt_mknode: mkpath returned '0' for $bud"
+			unless -e $bud;
+		$$r_opt{msg} = "error: $bud ($id) already exists\n";
 		return 0;
 	}
-	# set_namaste(0, "pairtree_$VERSION");  XXXXXXXXX no way to give dir!
+	$$r_opt{ppath} = $ppath;
+	$$r_opt{bud} = $bud;
+
 	return 1;
 }
 
-sub rmnode { my( @nodes )=@_;
+sub pt_mktree { my( $dir, $prefix, $r_opt )=@_;
 
-	# Don't allow empty node, especially for delnode, which could
-	# result in a disastrous rmtree against the entire pairtree.
-	#
-	die "rmnode: no node"		unless scalar(@nodes);
+	# XXXX make up my mind about when to croak and when to
+	#      use $$r_opt{msg}
+	$dir		or croak "no tree dir or empty tree dir";
+	$prefix ||= "";
+	ref($r_opt) eq "HASH" or
+		croak "r_opt must reference a hash (for input/output)";
+			# except that we ignore any r_opt inputs here
 
-	my $pdir = up_dir($dir);	# parent directory
-	$prefix = get_prefix($pdir);
-	my ($pp, $ret);
-	for (@nodes) {
-		s/^$prefix//;
-		$pp = $pdir . id2ppath($_);
-		# double check that we won't delete whole pairtree
-		die "bad node: $_"
-			if m,$R/*$,;
-		eval { $ret = File::Path::rmtree($pp) };
-		die "Couldn't delete $pp: $@"		if $@;
-		if (! $ret) {
-			print "warning: $_ ($pp) ", (-e $pp ?
-				"not removed" : "doesn't exist"), "\n";
-			next;
-			# xxx this shouldn't be a fatal error, but almost
-			#     a lazy existence check -- what should our
-			#     exit status be in this case?
-		}
-		print "removed: $_ | $pp\n";
-		# XXX should do anvls quoting
+	my $parent_dir = fiso_uname($dir);
+	my $ret;
+	eval { $ret = mkpath($dir) };
+	if ($@) {
+		$$r_opt{msg} = "Couldn't create $dir tree: $@";
+		return 1;
 	}
-	return $ret;
+	if ($ret == 0) {
+		$$r_opt{msg} = -e $dir ? "$dir already exists"
+			: "pt_mktree: mkpath returned '0' for $dir";
+		return 1;
+	}
+
+	my $pxfile = $parent_dir . $pfixtail;
+	my $msg = file_value("> $pxfile", $prefix)
+		if ($prefix);
+	if ($msg) {
+		$$r_opt{msg} = "$pxfile: $msg";
+		return 1;
+	}
+	$msg = nam_add($parent_dir, undef, '0', "pairtree_$numversion", 0);
+		# yyy better to use 0 to mean "don't truncate"
+		#length("pairtree_$VERSION"));
+	# xxxx croak or return via r_opt{msg}
+	$msg	and croak "Couldn't create namaste tag in $parent_dir: $msg";
+
+	return 0;
 }
 
-sub rmtree { my( $tree )=@_;
+sub pt_rmnode { my( $dir, $id, $r_opt )=@_;
 
-	print "XXX Not implemented yet; use 'rm -r'\n";
+	$dir		or croak "no dir or empty dir";
+	$id		or croak "no id or empty id";
+	ref($r_opt) eq "HASH" or
+		croak "r_opt must reference a hash (for input/output)";
+
+	my $parent_dir = $$r_opt{parent_dir}
+		|| fiso_uname($dir);
+	my $prefix = $$r_opt{prefix}
+		|| get_prefix($parent_dir);
+
+	# prefix substitution is optional unless -f
+	$prefix and ! ($id =~ s/^$prefix//) and $$r_opt{force} and
+		($$r_opt{msg} = "no prefix present in: $id"),
+		return 0;
+	$id !~ m/^\s*$/ or		# double check that we won't xxx?
+		croak "bad node";	# create a malformed pairtree
+#xxxxx this double check above should be against whole path
+	## double check that we won't delete whole pairtree
+	#die "bad node: $_"
+	#	if m,$R/*$,;
+
+	my $ppath = $parent_dir . id2ppath($id);
+	-e $ppath or			# if it doesn't exist
+		($$r_opt{msg} = "non-existent ppath ($ppath)"),
+		($$r_opt{ppath} = ""),
+		return 1;		# softer failure than return 2
+
+	$$r_opt{ppath} = $ppath;
+	my $ret;
+	eval { $ret = rmtree($ppath) };
+	if ($@) {
+		$$r_opt{msg} = "Couldn't create $ppath tree: $@";
+		return 1;
+	}
+	if ($ret == 0) {
+		$$r_opt{msg} = "warning: $id ($ppath) " .
+			(-e $ppath ?  "not removed" : "doesn't exist");
+		return 1;		# soft failure
+	}
+	return 0;			# success
 }
 
-sub i2p { my( @ids )=@_;
-
-	print id2ppath($_), "\n"	for (@ids);
-}
-
-sub p2i { my( @paths )=@_;
-
-	print ppath2id($_), "\n"	for (@paths);
-}
-
-# =============
-#find({ wanted => \&donode, preprocess => \&prenode, postprocess => \&postnode }, $tree);
-#
-#sub prenode{
-#
-#	return () if (scalar(@_) == 0);		# no work if no items
-#	return @_ if ($in_object);		# no-op if inside object
-#	my @ground = ();
-#	my @objdirs = ();
-#	for (@_) {
-#		($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $sze)
-#			= stat($_);
-#		#if (m@^[^/]{$pairp1,}@ || S_ISREG($mode)) {	# xxx efficiency?
-#		if (m@^[^/]{$pairp1,}@ || -f $_) {
-#			push(@ground, $_);
-#		}
-#		elsif (-d $_)  {
-#			push(@objdirs, $_);
-#		}
-#		else {		# nothing else will be processed
-#			$irregularcount++;
-#		}
-#	}
-#	print("Ground files: ", join(", ", @ground), "\n")
-#		if (scalar(@ground) > 0);
-#	push @ground, sort(@objdirs);
-#	return @ground;
-#}
-# =============
+#use File::Find;
+# $File::Find::prune = 1
 
 # XXX add to spec: two ways that a pairpath ends: 1) the form of the
 # ppath (ie, ends in a morty) and 2) you run "aground" smack into
@@ -439,33 +562,36 @@ sub p2i { my( @paths )=@_;
 my ($pdname, $tpname, $wpname);
 my $symlinks_followed = 1;
 my ($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $sze);
+my %curobj = (
+	'ppath' => '',
+	'encaperr' => 0,
+	'octets' => 0,
+	'streams' => 0,
+);
 
-my %curobj = ( 'ppath' => '', 'encaperr' => 0, 'octets' => 0, 'streams' => 0 );
-sub newptobj{ my( $ppath, $encaperr, $octets, $streams )=@_;
+my $homily = "(pairpath end should be followed by only one thing -- " .
+		"a directory name more than $pair characters long)";
 
+sub pt_newobj { my( $ppath, $encaperr, $octets, $streams )=@_;
+
+	# warning: ugly code ahead
 	if ($curobj{'ppath'}) {		# print record of previous obj
 		$_ = ppath2id($curobj{'ppath'});
-		s/^/$prefix/;		# uses global $prefix from lstree()
-		# XXX redo properly 
-		$opt{format} == OM_ANVL and
-			print("node: ",
-				$_, " | ",
-				$curobj{'ppath'}, " | ",
-				$curobj{'encaperr'}, " | ",
-				$curobj{'octets'}, ".", $curobj{'streams'},
-				"\n")
+		s/^/$$gr_opt{prefix}/;		# uses global set in lstree()
+		$$gr_opt{long} and
+			$gr_opt->{om}->elem('node',
+				join("  ", $_, $curobj{'ppath'},
+				"$curobj{'octets'}.$curobj{'streams'}")), 1
 		or
-			print($_, (! $opt{long} ? "" :
-				" $curobj{'octets'}.$curobj{'streams'}"),
-				"\n")
+			$gr_opt->{om}->elem('node', $_), 1
 		;
-
 		$curobj{'ppath'} eq $ppath and
-			print "ERROR: bad pairtree: $ppath contains more ",
-				"than one object\n";	# xxx better msg
+			print "error: corrupted pairtree at pairpath ",
+				"$ppath/: split end $homily\n";
+		# xxx use om?
 	}
 	# xxx strange
-	die "newptobj: all args must be defined"
+	die "pt_newobj: all args must be defined"
 		unless (defined($ppath) && defined($encaperr)
 			&& defined($octets) && defined($streams));
 	$curobj{'ppath'} = $ppath;
@@ -474,7 +600,7 @@ sub newptobj{ my( $ppath, $encaperr, $octets, $streams )=@_;
 	$curobj{'streams'} = $streams;
 }
 
-sub visit {	# receives no args
+sub pt_visit_node {	# receives no args
 
 	$pdname = $File::Find::dir;		# current parent directory name
 	$tpname = $_;				# current filename in that dir
@@ -482,16 +608,18 @@ sub visit {	# receives no args
 
 	# We always need lstat() info on the current node XXX why?
 	# xxx tells us all, but if following symlinks the lstat is done
+	# ... by find:  use (-X _), but of the nifty facts below we
+	# still need to harvest the size ($sze) by hand.
 	#
 	($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $sze) = lstat($tpname)
-		unless ($symlinks_followed);	# ... by find:  use (-X _).
+		unless ($symlinks_followed and ($sze = -s _));
 
 	#print "NEXT: $pdname $_ $wpname\n";
 
 	# If we follow symlinks (usual), we have to expect the -l type,
 	# which hides the type of the link target (what we really want).
 	#
-	if (-l _) {
+	if (! $Win and -l _) {
 		$symlinkcount++;
 		print "XXXX SYMLINK $_\n";
 		# yyy presumably this branch never happens when
@@ -503,14 +631,17 @@ sub visit {	# receives no args
 
 	if (-f $tpname) {
 		$filecount++;
-		if (m@^.*$R/(.*/)?pairtree.*$@) {
+		if (m@^.*$R/(.*/)?pairtree.*$@o) {
 			### print "$pdname PTREEFILE $tpname\n";
 			# xxx    if $verbose;
 			# else -prune ??
 		}
-		elsif (m@^.*$R/$P/[^/]+$@) {
+		elsif (m@^.*$R/$P/[^/]+$@o) {
 			#print "m@.*$R/$P/[^/]+@: $_\n";
-		 	print "$pdname UF $tpname\n";
+		 	#print "$pdname UF $tpname\n";
+			print "error: corrupted pairtree at pairpath ",
+				"$pdname/: found unencapsulated file ",
+				"'$tpname' $homily\n";
 		}
 		else {
 			# xxx sanity check that $curobj is defined
@@ -523,30 +654,34 @@ sub visit {	# receives no args
 	}
 	elsif (-d $tpname) {
 		$dircount++;
-		if (m@^.*$R/(.*/)?pairtree.*$@) {
-			print "$pdname PTREEDIR $tpname\n";
+		if (m@^.*$R/(.*/)?pairtree.*$@o) {
+			#print "$pdname PTREEDIR $tpname\n";
 			# xxx if $verbose;
 		#	-prune
 		}
 		# At last, we're entering a "regular" object.
 		# XXXXXXX add re qualifier so Perl knows re's not changing
-		elsif (m@^.*$R/($P/)?[^/]{$pairp1,}$@) {
+		elsif (m@^.*$R/($P/)?[^/]{$pairp1,}$@o) {
 			# start new object; but end previous object first
 			# form: ppath, EncapErr, octets, streams
 			$objectcount++;
-			newptobj($pdname, 0, 0, 0);
+			pt_newobj($pdname, 0, 0, 0);
 			# print "$pdname NS $tpname\n";
 			#	-fprintf $altout 'START %h 0\n'
 			#	$noprune
 		}
-		elsif (m@^.*$R/$P$@) {
+		elsif (m@^.*$R/$P$@o) {
 			#	-empty
 			# xxx if $verbose...	-printf '%p EP -\n'
 		}
 		# $pair, $pairm1, $pairp1
 		# We have a post-morty encapsulation error
-		elsif (m@^.*$R/([^/]{$pair}/)*[^/]{1,$pairm1}/[^/]{1,$pair}$@) {
-			print "$pdname PM $tpname\n";
+		elsif (m@^.*$R/([^/]{$pair}/)*[^/]{1,$pairm1}/[^/]{1,$pair}$@o) {
+			#print "$pdname PM $tpname\n";
+			print "error: corrupted pairtree at pairpath ",
+				"$pdname/: found '$tpname' after forced ",
+				"path ending $homily\n";
+				
 			#	-fprintf $altout 'START %h 0\n'
 			#	$noprune
 		}
@@ -556,328 +691,37 @@ sub visit {	# receives no args
 	}
 }
 
-# xxx bring in om and oml from Namaste.pm
+1;
 
-# 	# Node invariants:
-# 	#   1.  During main execution of a node visit, the stack top
-# 	#       names the parent dir (pdname) of the current node.
-# 	#   2.  To achieve this, before main execution our node's parent
-# 	#       is compared to the stack top, from which we expect one of
-# 	#       two outcomes.
-# 	#            ab/cd/ef
-# 	#            ab/cd/efg
-# 	#   3.  Either our node is an immediate descendant of the stack top,
-# 	#       or the stack top is from a completed subtree on a different
-# 	#       branch.
-# 	#   4.  In the latter case we "unvisit" each node in the stack top,
-# 	#       popping the stack as we go.
-# 	#   5.  Lstat will always have been called before the real work
-# 	#       begins, regardless of whether symlinks are being followed.
-# 	#   6.  Upon exit, if we are a directory, the current wpname is
-# 	#       pushed on the stack in anticipation of descent into it;
-# 	#       if we want to detect the case of an empty path or
-# 	#       directory, it is necessary to push onto the stack now
-# 	#       because we won't have a record of it (because there's
-# 	#       no further descent into it if the directory is empty).
-# 	# 
-# 	# Check our current ancestory and pop the stack as needed
-# 	# until stack top equals the parent for this (current) node.
-# 	# If there's a current item (open), we have to check for item
-# 	# boundaries; if we pop back through an item name, we need to
-# 	# close it.
-# 
-# 	# We may accumulate an item at any level.  We need to close an
-# 	# item when (a) we pop out of it or (b) descend into a ppath
-# 	# that extends from the same level.  If we pop out of it (a), a
-# 	# common case is when its enclosing directory is the only thing
-# 	# at the end of a ppath.  If we descend (b) into a ppath
-# 	# extension, we'll have to save the current item info on the
-# 	# stack first, as we might encounter other items before we pop
-# 	# back up an know whether our item is properly encapsulated.
-# 	#
-# 
-# 	# Feb 16:
-# 	# Modeling assumptions below.  If these are wrong then our theory
-# 	# is wrong, and we bail with "broken model".
-# 	# 
-# 	# Search is a depth-first, pre-order traversal.  Because we want
-# 	# to follow symlinks, we can't take advantage of the preprocess
-# 	# and postprocess options, which become no-ops in this case.
-# 	# This means we have to build our own stack.
-# 	# 
-# 	# We compute object sizes with a straightforward but naive use of
-# 	# what stat() returns for files that we visit.  This means we will
-# 	# be inaccurate when hard links or symlinks point to a file more
-# 	# than once (xxx and for sparse files?).  In principle, find()
-# 	# detects cycles (follow_fast), so whole directories shouldn't
-# 	# be counted twice.
-# 	# 
-# 	# When visiting a node, we assume there are three cases.
-# 	#  (a) We are at the same level as previously visited node, ie,
-# 	#      current parent equals previous parent.
-# 	#  (b) We just descended, ie, current parent extends previous
-# 	#      parent.  Assume also that because of pre-order traversal,
-# 	#      descent is "by one" but ascent blows thru prior levels to
-# 	#      jump into next subtree (post-order would invert these).
-# 	#  (c) We just exhausted the subtree we were in and jumped ((b)) to
-# 	#      a new subtree that was on find()'s stack, ie, current parent
-# 	#      neither equals nor extends the previous parent.  In this
-# 	#      case we have to pop our own stack, reporting on all
-# 	#      completed nodes along the way (the whole reason for doing
-# 	#      this work) until reaching the first match against a subpath
-# 	#      of the current parent.  Assume, by pre-order traversal,
-# 	#      that we will be a "by one" descendant of a path that was
-# 	#      on our stack, ie, that we can pop until we exactly match
-# 	#      against the current parent.
-# 	#
-# 	# Roughly, nodes are either directories or non-directories.
-# 	# Nodes are treated one way when descending (here, via visit())
-# 	# and another way when ascending (via unvisit()).
-# 	# 
-# 	# Put top of stack in shorter name.
-# 	$top = $ppstack[$#ppstack];		# xxx is this $#... safe?
-# 
-# 	# Because we push a directory onto the stack before we get here,
-# 	# we don't distinguish here between case (a) and case (b).
-# 	#
-# 	#if ($pdname eq $top->{'pp'}) {		# Same level -- case (a)
-# 	#	print "descendant or peer $_\n";	# xxx now what?
-# 	#	#push(@{$top->{'items'}}, $_);
-# 	#	#$top->{'flag'} |= 1;
-# 	#}
-# 	#elsif ($pdname =~ m@^$top->{'pp'}@) {
-# 	#	die("find unexpectedly jumped more than one level deeper"
-# 	#			. ": ppath=$top->{'pp'}, pdname=$pdname")
-# 	#		if ($top->{'pp'} ne '');
-# 	#	# else still initializing (first visit), so fall through
-# 	#}
-# 	if ($pdname ne $top->{'pp'} &&	# if we're not at same or lower level
-# 		$top->{'pp'} ne '') {	# ... and it's not first node ever
-# 		do {
-# 			# XXXXX much reporting during "unvisit"
-# 			unvisit(pop(@ppstack));
-# 			$top = $ppstack[$#ppstack];	# xxx $#... safe?
-# 			# xxx check for underflow
-# 		} until ($pdname eq $top->{'pp'});
-# 	}
-# 
-# 	# If we get here, the stack top's pp is the same as our parent
-# 	# (or it's empty because we're at our first node ever).
-# 	#
-# 	if (-l _) {
-# 		print "XXXX SYMLINK $_\n";
-# 		# XXX what does this branch do when _not_ following links?
-# 		($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $sze)
-# 			= stat($tpname);		# get the real thing
-# 			# get type that symlink points to
-# 	}
-# 
-# # $in_item means we're in an item directory; only turn $in_item off when leaving
-# # if (! $in_item && ! -d _) {
-# #	then we have to count current node as part of something
-# # }
-# # if $in_item {
-# #	if -f   add file stats
-# #	elsif -d  add dir stats
-# #	else    add other node stats
-# # }
-# #
-# 	# If here, we've done stat or lstat for the actual file or dir,
-# 	# therefore the filehandle '_' contains what we need.
-# 	#
-# 	if (-f _) {
-# 
-# 		# Regular File Branch.
-# 		#
-# 		# Every file belongs to some item.  Every item is either an
-# 		# object or, if improperly encapsulated, part of an object.
-# 		# If we encounter a file and we're not 'in_item', then
-# 		# it's not properly encapsulated; otherwise, our file
-# 		# gets counted as part of the current item's stats.
-# 		#
-# 		#xxxxx put this back in _after_ processing node (during
-# 		# unvisit:  if ($wpname =~ m@^.*$R/(.*/)?pairtree.*$@) {
-# 		#	-prune
-# 		#}
-# 		if ($in_item) {
-# 			# yyy add size to stacked object
-# 			$curobj{'bytes'} += (-s _);
-# 			$curobj{'streams'}++;
-# 			#print "cobjbytes=$curobj{'bytes'}, cobjstreams=",
-# 			#	$curobj{'streams'}, "\n";
-# 		#	-fprintf $altout 'IN %p %s\n'
-# 		#	$noprune
-# 		}
-# 		else {
-# 			# XXX create item, not properly encapsulated,
-# 			#     in which to put the file
-# 		 	print "$pdname UF $tpname\n";
-# 		#if ($wpname =~ m@^.*$R/$P/[^/]+$@) {
-# 		#	#print "m@.*$R/$P/[^/]+@: $_\n";
-# 		#	# yyy add item to stacked object top level,
-# 		#	#     flag encap err
-# 		#	# yyy add size to stacked object
-# 		#	-fprintf $altout 'UF %h %s\n'
-# 		}
-# 		return;
-# 	}
-# 	elsif (! -d _) {
-# 
-# 		# Non-regular file, non-directory Branch.
-# 		#
-# 		$irregularcount++;
-# 		# xxxx can't under follow_fast, _ caches stat results; can't I
-# 		# get the file types (to count)  without doing another stat?
-# 		return;
-# 	}
-# 
-# 	# Directory (or symlink) Branch.
-# 	#
-# 	# If we're here we know that we have a directory (-d _).
-# 
-# 	# Now, look at the form of pathname.
-# 	#
-# 	#xxxxx put this back in _after_ processing node (during
-# 	# unvisit: if ($wpname =~ m@^.*$R/(.*/)?pairtree.*$@) {
-# 	#	-prune
-# 	#	$top = mkstackent($pdname);
-# 	#	push(@ppstack, $top);
-# 	#}
-# 
-# 	# XXX add re qualifier so Perl knows re's not changing
-# 	# if we've hit what might be a regular object dir...
-# 	if ($wpname =~ m@^.*$R/($P/)?[^/]{$pairp1,}$@) {
-# 
-# 		# We're at an item directory; hopefully it's a properly
-# 		# encapsulated object, but we won't know until all of its
-# 		# peers have been seen.  So we "start" new current item
-# 		# after first closing any previously open item.  It is a
-# 		# fatal error if any previous item is either not at the
-# 		# same level or not closed (fatal because our assumptions
-# 		# about the algorithm may be wrong).
-# 		#
-# 		if ($ci_ppath eq '') {		# previous item was closed
-# 			$ci_ppath = $pdname;
-# 		}
-# 		elsif ($ci_ppath eq $pdname) {	# still open at the same level
-# 
-# 			# Need to close previous item and store on stack
-# 			push(@{$top->{'items'}}, {	# push, later shift
-# 				'ppath' => $ci_ppath,
-# 				'wpname' => $ci_wpname,
-# 				'octets' => $ci_octets,
-# 				'streams' => $ci_streams,
-# 			});
-# 		}
-# 		else {
-# 			die("in $pdname, previous item '$ci_wpname' "
-# 				. "wasn't closed");
-# 		}
-# 
-# 		# Initialize new item.  $ci_ppath already set correctly.
-# 		#
-# 		$ci_wpname = $wpname;
-# 		$ci_octets = $ci_streams = 0;
-# 
-# 		$top = mkstackent($wpname);	# xxx PM?
-# 		push(@ppstack, $top);
-# 
-# 		# yyy compare pdname to stack top.
-# 		#     if pdname is same as stack top, {add item
-# 		#     to list contained in stack top, flag encaperr}
-# 		#     elsif pdname is not superstring of stack top {
-# 		#     we've just closed off a ppath and we need
-# 		#     to pop the stack top and report (a) proper
-# 		#     or improper encapsulation (#items > 1 or
-# 		#     any file item) and (b) accumulated oxum (if
-# 		#     no items, report EP empty ppath.}
-# 		#     In any case, push curr ppath as new stack
-# 		#     top and add item to list at stack top, but
-# 		#     flag encap err if PM err)
-# 		#     (at end, report stack top)
-# 		# start new object; but end previous object first
-# 		# form: ppath, EncapErr, bytes, streams
-# 		print "$pdname NS $tpname\n";
-# 		#	-fprintf $altout 'START %h 0\n'
-# 		#	$noprune
-# 	}
-# 	elsif ($wpname =~ m@^.*$R/$P$@) {
-# 
-# 		# Extending the ppath, no item impact.
-# 		#
-# 		$top = mkstackent($wpname);
-# 		push(@ppstack, $top);
-# 
-# 		# yyy see above
-# 		#	-empty
-# 		#	-printf '%p EP -\n'
-# 	}
-# 	# $pair, $pairm1, $pairp1
-# 	elsif ($wpname =~
-# 	    m@^.*$R/([^/]{$pair}/)*[^/]{1,$pairm1}/[^/]{1,$pair}$@) {
-# 
-# 		# We have a short directory following the end of a ppath.
-# 		# This means a Post-Morty warning and starts a new item.
-# 
-# 		# yyy [combine with NS regexp and do similarly???]
-# 		# xxx push dir node
-# #	XXXXXXXXXXXXX check and close any current item
-# 		print "$pdname PM $tpname\n";
-# 		$top = mkstackent($wpname);
-# 		#push(@{$top->{'items'}}, $_);
-# 		push(@ppstack, $top);
-# 		#	-fprintf $altout 'START %h 0\n'
-# 		#	$noprune
-# 	}
-# 	else {
-# 		$top = mkstackent($pdname);
-# 		push(@ppstack, $top);
-# 	}
-# 
-# 	return;
-# }
+__END__
 
-=head1 OPTIONS
+=head1 NAME
 
-=over
+File::Pairtree - routines to manage pairtrees
 
-=item B<-d>
+=head1 SYNOPSIS
 
-Specify pairtree directory.
+ use File::Pairtree;           # imports routines into a Perl script
 
-=item B<-h>, B<--help>
+ id2ppath($id);                # returns pairpath corresponding to $id
+ id2ppath($id, $separator);    # if you want an alternate separator char
 
-Print extended help documentation.
+ ppath2id($path);              # returns id corresponding to $path
+ ppath2id($path, $separator);  # if you want an alternate separator char
 
-=item B<--man>
+ pt_mkbud();
+ pt_mknode();
+ pt_mktree();
+ pt_rmnode();
+ pt_lsnode();
 
-Print full documentation.
+=head1 DESCRIPTION
 
-=item B<--version>
+This is very brief documentation for the B<Pairtree> Perl module.
 
-Print the current version number and exit.
+=head1 COPYRIGHT AND LICENSE
 
-=back
-
-=head1 SEE ALSO
-
-touch(1)
-
-=head1 AUTHOR
-
-John Kunze I<jak at ucop dot edu>
-
-=head1 COPYRIGHT
-
-  Copyright 2009 UC Regents.  Open source Apache License, Version 2.
-
-=begin CPAN
-
-=head1 README
-
-=head1 SCRIPT CATEGORIES
-
-=end CPAN
+Copyright 2008-2010 UC Regents.  Open source BSD license.
 
 =cut
 
@@ -885,7 +729,7 @@ __END__
 
 #!/usr/bin/perl -w -Ilib
 
-# XXX to pairtree spec add appendix enumberating some named methods for
+# XXX to pairtree spec add appendix enumerating some named methods for
 #   deriving objdir names
 # XXX add to spec: two ways that a pairpath ends: 1) the form of the
 # ppath (ie, ends in a morty) and 2) you run "aground" smack into
@@ -1120,7 +964,7 @@ sub visit{	# receives no args
 	# If we get here, the stack top's pp is the same as our parent
 	# (or it's empty because we're at our first node ever).
 	#
-	if (-l _) {
+	if (! $Win and -l _) {
 		print "XXXX SYMLINK $_\n";
 		# XXX what does this branch do when _not_ following links?
 		($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $sze)

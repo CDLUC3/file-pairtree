@@ -52,7 +52,7 @@ sub filval { my( $file, $value )=@_;	# $file must begin with >, <, or >>
 
 #### end boilerplate
 
-use File::Pairtree;
+use File::Pairtree ':all';
 
 my $pre = $File::Pairtree::root;
 
