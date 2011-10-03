@@ -1,3 +1,5 @@
+# XXX change {mk,ls,rm}bud to {mk,ls,re}id
+
 package File::Pairtree;
 
 use 5.006;
@@ -327,6 +329,9 @@ my $homily = "(pairpath end should be followed by only one thing -- " .
 # Returns the small hash { 'wanted' => $visitor, 'follow' => 1 } and a
 # subroutine $visit_over that can be called to summarize the visit.
 #
+
+# XXX change {mk,ls,rm}bud to {mk,ls,rm}id
+
 sub make_visitor { my( $r_opt )=@_;
 
 	my $om = $r_opt->{om} or
@@ -350,6 +355,9 @@ sub make_visitor { my( $r_opt )=@_;
 		'streams' => 0,
 	);
 
+    # xxx move this outside closure and give it a $currobj arg?
+    #     or is this much more efficient as-is?
+    # xxx nail down everything that won't change during lstree
     my $newobj = sub { my( $ppath, $encaperr, $octets, $streams )=@_;
 
 	# warning: ugly code ahead
@@ -369,7 +377,7 @@ sub make_visitor { my( $r_opt )=@_;
 		# xxx use om?
 	}
 	# xxx strange
-	die "pt_newobj: all args must be defined"
+	die "newobj: all args must be defined"
 		unless (defined($ppath) && defined($encaperr)
 			&& defined($octets) && defined($streams));
 	$curobj{'ppath'} = $ppath;
@@ -399,7 +407,7 @@ sub make_visitor { my( $r_opt )=@_;
 	#
 	if (! $Win and -l _) {
 		$symlinkcount++;
-		print "XXXX SYMLINK $_\n";
+		#print "XXXX SYMLINK $_\n";
 		# yyy presumably this branch never happens when
 		#     _not_ following links?
 		($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $sze)
@@ -438,7 +446,6 @@ sub make_visitor { my( $r_opt )=@_;
 		#	-prune
 		}
 		# At last, we're entering a "regular" object.
-		# XXXXXXX add re qualifier so Perl knows re's not changing
 		elsif (m@^.*$R/($P/)?[^/]{$pairp1,}$@o) {
 			# start new object; but end previous object first
 			# form: ppath, EncapErr, octets, streams
@@ -475,7 +482,7 @@ sub make_visitor { my( $r_opt )=@_;
 
 	# Dummy call to pt_newobj() to cough up the last buffered object.
 	# xxx not multi-threadable!  how to give newobj its own context?
-	pt_newobj("", 0, 0, 0);			# shake out the last one
+	&$newobj("", 0, 0, 0);			# shake out the last one
 
 	# XXX what does find return?
 	$om->elem("lstree", "find returned '$ret' for $tree")	if $ret;
@@ -486,7 +493,7 @@ sub make_visitor { my( $r_opt )=@_;
     };
 
     	return ({ 'wanted' => $visitor, 'follow' => $r_opt->{follow_fast} },
-		$newobj, $visit_over);
+		$visit_over);
 }
 
 my $objectcount = 0;		# number of objects encountered
@@ -515,33 +522,33 @@ sub pt_lstree { my( $tree, $r_opt, $r_visit_node, $r_wrapup )=@_;
 	$$r_opt{parent_dir} ||= fiso_uname($tree);
 	$$r_opt{prefix} ||= get_prefix($$r_opt{prefix});
 
-#xxx	my ($find_opt, $newobj, $visit_over) = make_visitor($r_opt);
-#	$find_opts or
-#		croak "make_visitor() failed";
-#	my $ret = find($find_opts, $tree);
-#	$visit_over and
-#		$ret = &$visit_over($ret, $tree);
-#	return $ret;
+	my ($find_opt, $visit_over) = make_visitor($r_opt);
+	$find_opt or
+		croak "make_visitor() failed";
+	my $ret = find($find_opt, $tree);
+	$visit_over and
+		&$visit_over($ret, $tree);
+	return $ret;
 
-	$gr_opt = $r_opt;	# make options available to find
-	my %find_opt = (
-		'wanted'	=>  $r_visit_node,
-		'follow_fast'	=>  $$r_opt{follow_fast},
-	);
-
-	#print "Id      Oxum\n";		# XXXXXX this is our r_startup
-
-	my $ret = find(\%find_opt, $tree);
-
-	# XXXXX this is our r_wrapup
-	# Dummy call to pt_newobj() to cough up the last buffered object.
-	pt_newobj("", 0, 0, 0);			# shake out the last one
-	# XXX what does find return?
-	#print "lstree: find returned '$ret' for $tree"		if $ret;
-	$gr_opt->{om}->elem('lstree', "find returned '$ret' for $tree")	if $ret;
-	#print "$objectcount object", ($objectcount == 1 ? "" : "s"), "\n";
-	$gr_opt->{om}->elem('objectcount', "$objectcount object" .
-		($objectcount == 1 ? "" : "s"));
+#	$gr_opt = $r_opt;	# make options available to find
+#	my %find_opt = (
+#		'wanted'	=>  $r_visit_node,
+#		'follow_fast'	=>  $$r_opt{follow_fast},
+#	);
+#
+#	#print "Id      Oxum\n";		# XXXXXX this is our r_startup
+#
+#	my $ret = find(\%find_opt, $tree);
+#
+#	# XXXXX this is our r_wrapup
+#	# Dummy call to pt_newobj() to cough up the last buffered object.
+#	pt_newobj("", 0, 0, 0);			# shake out the last one
+#	# XXX what does find return?
+#	#print "lstree: find returned '$ret' for $tree"		if $ret;
+#	$gr_opt->{om}->elem('lstree', "find returned '$ret' for $tree")	if $ret;
+#	#print "$objectcount object", ($objectcount == 1 ? "" : "s"), "\n";
+#	$gr_opt->{om}->elem('objectcount', "$objectcount object" .
+#		($objectcount == 1 ? "" : "s"));
 
 	return $ret;
 }
