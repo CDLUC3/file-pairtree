@@ -64,7 +64,7 @@ like $x, qr|ab/c/|, "simple mkbud";
 
 use File::Namaste;
 (undef, $x, undef) = File::Namaste::nam_get($td, 0);
-is $x, "$td/0=pairtree_$File::Pairtree::NVERSION",
+is $x, "$td/0=pairtree_$File::Pairtree::VERSION",
 	"namaste dirtype tag created";
 
 $x = `$cmd -d $td lstree`;

@@ -5,10 +5,10 @@ use strict;
 use warnings;
 
 our $VERSION;
-#$VERSION = sprintf "%d.%02d", q$Name: Release-0-28 $ =~ /Release-(\d+)-(\d+)/;
-$VERSION = sprintf "%s", q$Name: Release-v0.304.0$ =~ /Release-(v\d+\.\d+\.\d+)/;
-our $NVERSION;			# pure numeric 2-part equivalent version
-($NVERSION = $VERSION) =~ s/v(\d+\.\d+)\.\d+/$1/;
+$VERSION = sprintf "%d.%02d", q$Name: Release-1-00 $ =~ /Release-(\d+)-(\d+)/;
+#$VERSION = sprintf "%s", q$Name: Release-v0.304.0$ =~ /Release-(v\d+\.\d+\.\d+)/;
+#our $NVERSION;			# pure numeric 2-part equivalent version
+#($NVERSION = $VERSION) =~ s/v(\d+\.\d+)\.\d+/$1/;
 
 require Exporter;
 our @ISA = qw(Exporter);
@@ -319,6 +319,176 @@ sub pt_lsbud { my( $dir, $id, $r_opt )=@_;
 	return 0;
 }
 
+my $homily = "(pairpath end should be followed by only one thing -- " .
+		"a directory name more than $pair characters long)";
+
+# Create a closure to hold a stateful node-visiting subroutine and other
+# options suitable to be passed as the options parameter to File::Find.
+# Returns the small hash { 'wanted' => $visitor, 'follow' => 1 } and a
+# subroutine $visit_over that can be called to summarize the visit.
+#
+sub make_visitor { my( $r_opt )=@_;
+
+	my $om = $r_opt->{om} or
+		return undef;
+
+	my $objectcount = 0;		# number of objects encountered
+	my $filecount = 0;		# number of files encountered xxx
+	my $dircount = 0;		# number of directories encountered xxx
+	my $symlinkcount = 0;		# number of symlinks encountered xxx
+	my $irregularcount = 0;		# non file, non dir fs items to report
+
+	my ($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $sze);
+	my ($pdname, $tpname, $wpname);
+	my $symlinks_followed = 1;
+
+	# yyy do as $curobj = {...}; ?
+	my %curobj = (
+		'ppath' => '',
+		'encaperr' => 0,
+		'octets' => 0,
+		'streams' => 0,
+	);
+
+    my $newobj = sub { my( $ppath, $encaperr, $octets, $streams )=@_;
+
+	# warning: ugly code ahead
+	if ($curobj{'ppath'}) {		# print record of previous obj
+		$_ = ppath2id($curobj{'ppath'});
+		s/^/$r_opt->{prefix}/;		# uses global set in lstree()
+		$r_opt->{long} and
+			$om->elem('node',
+				join("  ", $_, $curobj{'ppath'},
+				"$curobj{'octets'}.$curobj{'streams'}")), 1
+		or
+			$om->elem('node', $_), 1
+		;
+		$curobj{'ppath'} eq $ppath and
+			print "error: corrupted pairtree at pairpath ",
+				"$ppath/: split end $homily\n";
+		# xxx use om?
+	}
+	# xxx strange
+	die "pt_newobj: all args must be defined"
+		unless (defined($ppath) && defined($encaperr)
+			&& defined($octets) && defined($streams));
+	$curobj{'ppath'} = $ppath;
+	$curobj{'encaperr'} = $encaperr;
+	$curobj{'octets'} = $octets;
+	$curobj{'streams'} = $streams;
+    };
+
+    my $visitor = sub {		# receives no args from File::Find
+
+	$pdname = $File::Find::dir;		# current parent directory name
+	$tpname = $_;				# current filename in that dir
+	$_ = $wpname = $File::Find::name;	# whole pathname to file
+
+	# We always need lstat() info on the current node XXX why?
+	# xxx tells us all, but if following symlinks the lstat is done
+	# ... by find:  use (-X _), but of the nifty facts below we
+	# still need to harvest the size ($sze) by hand.
+	#
+	($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $sze) = lstat($tpname)
+		unless ($symlinks_followed and ($sze = -s _));
+
+	#print "NEXT: $pdname $_ $wpname\n";
+
+	# If we follow symlinks (usual), we have to expect the -l type,
+	# which hides the type of the link target (what we really want).
+	#
+	if (! $Win and -l _) {
+		$symlinkcount++;
+		print "XXXX SYMLINK $_\n";
+		# yyy presumably this branch never happens when
+		#     _not_ following links?
+		($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $sze)
+			= stat($tpname);	# get the real thing
+	}
+	# After this, tests of the form (-X _) give almost everything.
+
+	if (-f $tpname) {
+		$filecount++;
+		if (m@^.*$R/(.*/)?pairtree.*$@o) {
+			### print "$pdname PTREEFILE $tpname\n";
+			# xxx    if $verbose;
+			# else -prune ??
+		}
+		elsif (m@^.*$R/$P/[^/]+$@o) {
+			#print "m@.*$R/$P/[^/]+@: $_\n";
+		 	#print "$pdname UF $tpname\n";
+			print "error: corrupted pairtree at pairpath ",
+				"$pdname/: found unencapsulated file ",
+				"'$tpname' $homily\n";
+		}
+		else {
+			# xxx sanity check that $curobj is defined
+			$curobj{'octets'} += $sze;
+			### print "sssss $curobj{'octets'}\n";
+			$curobj{'streams'}++;
+		#	-fprintf $altout 'IN %p %s\n'
+		#	$noprune
+		}
+	}
+	elsif (-d $tpname) {
+		$dircount++;
+		if (m@^.*$R/(.*/)?pairtree.*$@o) {
+			#print "$pdname PTREEDIR $tpname\n";
+			# xxx if $verbose;
+		#	-prune
+		}
+		# At last, we're entering a "regular" object.
+		# XXXXXXX add re qualifier so Perl knows re's not changing
+		elsif (m@^.*$R/($P/)?[^/]{$pairp1,}$@o) {
+			# start new object; but end previous object first
+			# form: ppath, EncapErr, octets, streams
+			$objectcount++;
+			&$newobj($pdname, 0, 0, 0);
+			# print "$pdname NS $tpname\n";
+			#	-fprintf $altout 'START %h 0\n'
+			#	$noprune
+		}
+		elsif (m@^.*$R/$P$@o) {
+			#	-empty
+			# xxx if $verbose...	-printf '%p EP -\n'
+		}
+		# $pair, $pairm1, $pairp1
+		# We have a post-morty encapsulation error
+		elsif (m@^.*$R/([^/]{$pair}/)*[^/]{1,$pairm1}/[^/]{1,$pair}$@o) {
+			#print "$pdname PM $tpname\n";
+			print "error: corrupted pairtree at pairpath ",
+				"$pdname/: found '$tpname' after forced ",
+				"path ending $homily\n";
+				
+			#	-fprintf $altout 'START %h 0\n'
+			#	$noprune
+		}
+	}
+	else {
+		$irregularcount++;
+	}
+    };
+
+    my $visit_over = sub { my( $ret, $tree )=@_;
+
+	$ret ||= 0;
+
+	# Dummy call to pt_newobj() to cough up the last buffered object.
+	# xxx not multi-threadable!  how to give newobj its own context?
+	pt_newobj("", 0, 0, 0);			# shake out the last one
+
+	# XXX what does find return?
+	$om->elem("lstree", "find returned '$ret' for $tree")	if $ret;
+	$om->elem("objectcount", "$objectcount object" .
+		($objectcount == 1 ? "" : "s"));
+
+	return ($objectcount);
+    };
+
+    	return ({ 'wanted' => $visitor, 'follow' => $r_opt->{follow_fast} },
+		$newobj, $visit_over);
+}
+
 my $objectcount = 0;		# number of objects encountered
 my $filecount = 0;		# number of files encountered xxx
 my $dircount = 0;		# number of directories encountered xxx
@@ -337,12 +507,21 @@ sub pt_lstree { my( $tree, $r_opt, $r_visit_node, $r_wrapup )=@_;
 	#ref( $r_wrapup ||= \&pt_lstree_wrapup ) eq "CODE" or
 	#	croak "r_wrapup must reference a node-visiting function";
 
+	# xxx should probably test directly for symlink capacity
 	defined($Win) or	# if we're on a Windows platform avoid -l
 		$Win = grep(/Win32|OS2/i, @File::Spec::ISA);
 
 	$tree = fiso_dname($tree, $R);	# make sure we have descender
 	$$r_opt{parent_dir} ||= fiso_uname($tree);
 	$$r_opt{prefix} ||= get_prefix($$r_opt{prefix});
+
+#xxx	my ($find_opt, $newobj, $visit_over) = make_visitor($r_opt);
+#	$find_opts or
+#		croak "make_visitor() failed";
+#	my $ret = find($find_opts, $tree);
+#	$visit_over and
+#		$ret = &$visit_over($ret, $tree);
+#	return $ret;
 
 	$gr_opt = $r_opt;	# make options available to find
 	my %find_opt = (
@@ -463,7 +642,7 @@ sub pt_mktree { my( $dir, $prefix, $r_opt )=@_;
 		return 1;
 	}
 	$msg		and croak "Couldn't create namaste tag in $dir: $msg";
-	$msg = nam_add($parent_dir, undef, '0', "pairtree_$NVERSION", 0);
+	$msg = nam_add($parent_dir, undef, '0', "pairtree_$VERSION", 0);
 		# yyy better to use 0 to mean "don't truncate"
 		#length("pairtree_$VERSION"));
 	# xxxx croak or return via r_opt{msg}
@@ -538,9 +717,6 @@ my %curobj = (
 	'octets' => 0,
 	'streams' => 0,
 );
-
-my $homily = "(pairpath end should be followed by only one thing -- " .
-		"a directory name more than $pair characters long)";
 
 sub pt_newobj { my( $ppath, $encaperr, $octets, $streams )=@_;
 

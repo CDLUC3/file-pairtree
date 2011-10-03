@@ -25,7 +25,7 @@ WriteMakefile(
 	'File::Find'	=> '0',
 	'File::Path'	=> '0',
 	'File::OM'	=> '0.21',
-	'File::Value'	=> 'v0.250.0',
+	'File::Value'	=> '1.00',
 	'File::Namaste'	=> 'v0.261.0',
     },
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
