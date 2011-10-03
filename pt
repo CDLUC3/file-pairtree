@@ -11,7 +11,7 @@ my $VERSION = $File::Pairtree::VERSION;
 use File::Pairtree ':all';
 use File::Value ':all';
 use File::Path;
-use File::Find;		# for lstree, lsbud
+use File::Find;		# for lstree, lsid
 use File::OM;
 
 use Pod::Usage;
@@ -127,23 +127,23 @@ sub do_help { my( $topic )=@_;
 	#return print "XXX place holder for help on $topic\n";
 }
 
-sub do_lsbud { my( @nodes )=@_;
+sub do_lsid { my( @nodes )=@_;
 
-	# Don't allow empty node, especially for rmbud, which could
+	# Don't allow empty node, especially for rmid, which could
 	# result in a disastrous rmtree against the entire pairtree.
 	#
 	scalar(@nodes) > 0	or pod2usage("$0: no id given");
 
 	my $exit_status = 0;		# optimistic
 
-	# set options so pt_lsbud doesn't need to compute each time
+	# set options so pt_lsid doesn't need to compute each time
 	$o{parent_dir} = fiso_uname(fiso_dname($dir, $R));
 	$o{prefix} = get_prefix( $o{parent_dir} );
 	$o{force} = $opt{force};
 
 	my ($id, $ret);
 	for $id (@nodes) {
-		$ret = pt_lsbud($dir, $id, \%o);
+		$ret = pt_lsid($dir, $id, \%o);
 		$ret or		# if success
 			$om->elem($id, $o{bud}),
 			next;
@@ -153,9 +153,9 @@ sub do_lsbud { my( @nodes )=@_;
 	return $exit_status;
 }
 
-# XXX lsbud should list (a) ppath, (b) bud, and (c) leaf
+# XXX lsid should list (a) ppath, (b) bud, and (c) leaf
 #     id | pairpath_root/ab/c | abc | oxum  ???
-# pt_lsbud to return ref to array representing a node, each of form
+# pt_lsid to return ref to array representing a node, each of form
 #    (id | ppath | bud (enclosing dirname for leaf) | leaf oxum)
 # or (id | "" | ...    <no ppath>) # or (id | ppath | ""     <no bud>>)
 
@@ -198,16 +198,16 @@ sub do_lstree { my( @trees )=@_;
 	return $exit_status;
 }
 
-sub do_mkbud { my( @nodes )=@_;
+sub do_mkid { my( @nodes )=@_;
 
-	# Don't allow empty node, especially for rmbud, which could
+	# Don't allow empty node, especially for rmid, which could
 	# result in a disastrous rmtree against the entire pairtree.
 	#
 	scalar(@nodes) > 0	or pod2usage("$0: no id given");
 
 	my $exit_status = 0;	# optimistic
 
-	# set options so pt_mkbud doesn't need to compute each time
+	# set options so pt_mkid doesn't need to compute each time
 	$o{parent_dir} = fiso_uname(fiso_dname($dir, $R));
 	$o{prefix} = get_prefix( $o{parent_dir} );
 	$o{bud_style} = $opt{bud};
@@ -215,7 +215,7 @@ sub do_mkbud { my( @nodes )=@_;
 
 	my ($id, $ret);
 	for $id (@nodes) {
-		($ret = pt_mkbud($dir, $id, \%o)) and
+		($ret = pt_mkid($dir, $id, \%o)) and
 			$om->elem($id, $o{bud}),
 			next;
 		$exit_status = 1;	# if we get here, we had trouble
@@ -241,23 +241,23 @@ sub do_mktree { my( $tree, $prefix )=@_;
 	return 0;		# success means exit status 0
 }
 
-sub do_rmbud { my( @nodes )=@_;
+sub do_rmid { my( @nodes )=@_;
 
-	# Don't allow empty node, especially for rmbud, which could
+	# Don't allow empty node, especially for rmid, which could
 	# result in a disastrous rmtree against the entire pairtree.
 	#
 	scalar(@nodes) > 0	or pod2usage("$0: no id given");
 
 	my $exit_status = 0;		# optimistic
 
-	# set options so pt_rmbud doesn't need to compute each time
+	# set options so pt_rmid doesn't need to compute each time
 	$o{parent_dir} = fiso_uname(fiso_dname($dir, $R));
 	$o{prefix} = get_prefix( $o{parent_dir} );
 	$o{force} = $opt{force};
 
 	my ($id, $ret);
 	for $id (@nodes) {
-		$ret = pt_rmbud($dir, $id, \%o);
+		$ret = pt_rmid($dir, $id, \%o);
 		$ret or		# if success
 			$om->elem($id, $o{bud}),
 			next;
@@ -290,24 +290,24 @@ pt - make, remove, and list pairtrees and pairtree buds
 
    pt [-d dir] mktree directory [prefix]               # make a pairtree
    pt [-l] [-d dir] [rmtree | lstree] [directory] ...  # remove/list tree(s)
-   pt [-d dir] [mkbud | rmbud | lsbud] id ...          # manipulate bud(s)
+   pt [-d dir] [mkid | rmid | lsid] id ...          # manipulate bud(s)
    pt [i2p | p2i] name ...                             # pure id/path mapping
 
 Pairtrees map identifiers to filesystem paths.  Use sub-commands to create,
 delete, modify, and report on them.  Leaves are the user's concern, but with
-'mkbud' and an id, "pt" encloses every leaf in a bud directory using the full
+"mkid" and an id, "pt" encloses every leaf in a bud directory using the full
 id (with exceptions for short ids).  See "pt --man" for more.  Examples:
 
-   $ pt mkbud foo bar zafp              # mkbud with no tree first calls
+   $ pt mkid foo bar zafp               # mkid with no tree first calls
    ./pairtree_root/fo/o/foo		# mktree if there's no pairtree, then
    ./pairtree_root/ba/r/bar		# creates each pairpath and bud (node)
    ./pairtree_root/za/fp/zafp		# directory at the pairpath's end
-   $ pt rmbud bar			# remove node identified by 'bar'
+   $ pt rmid bar			# remove node identified by 'bar'
    removed: bar | ./pairtree_root/ba/r/
    $ touch ./pairtree_root/za/fp/zafp/{a,b,c}	# create some leaf content
    $ pt lstree -l			# so we have something to report on
    zafp   0.3				# after the bud name is the "oxum",
-   foo   0.0				# or # of octets and # of files
+   foo   0.0				# or num of octets and num of files
 EOI
 	return 1;
 }
@@ -330,7 +330,7 @@ pt - command to manipulate pairtrees
 
 =item B<pt> [B<-l>] [B<-d dir>] [B<rmtree | lstree>] [I<directory>] ...
 
-=item B<pt> [B<-d dir>] [B<mkbud | rmbud | lsbud>] I<id> ...
+=item B<pt> [B<-d dir>] [B<mkid | rmid | lsid>] I<id> ...
 
 =item B<pt> [B<i2p | p2i>] I<name> ...
 
@@ -353,9 +353,9 @@ output can be specified with the B<--format> option, currently one of
 
 The third form creates, deletes, or tests the existence of tree nodes
 addressed via the identifier corresponding to each node's filesystem
-I<pairpath> directory.  When B<mkbud> is used with a non-existent
+I<pairpath> directory.  When B<mkid> is used with a non-existent
 pairtree, it will attempt first to create a pairtree.  After creating a
-new pairpath, B<mkbud> will create a I<bud> directory to encapsulate
+new pairpath, B<mkid> will create a I<bud> directory to encapsulate
 the new tree I<leaf> (that will not otherwise be supplied by B<pt>).
 
 By default, the bud directory name will be taken from the full form of
@@ -376,18 +376,18 @@ This beta-level software has not been extensively tested.
 
 =head1 EXAMPLES
 
-   $ pt mkbud foo bar zafp
+   $ pt mkid foo bar zafp
    ./pairtree_root/fo/o/foo
    ./pairtree_root/ba/r/bar
    ./pairtree_root/za/fp/zafp
-   $ pt rmbud bar
+   $ pt rmid bar
    removed: bar | ./pairtree_root/ba/r/
    $ touch ./pairtree_root/za/fp/zafp/{a,b,c}
    $ pt lstree -l
    zafp   0.3
    foo   0.0
    2 objects
-   $ pt mkbud ab c ''
+   $ pt mkid ab c ''
    ./pairtree_root/ab/0ab
    ./pairtree_root/c/00c
    ./pairtree_root/supernode
@@ -433,7 +433,7 @@ Options yet to come, for B<--bud>, B<--force>, B<--all>.
 Bug fixed so that Namaste tag is no longer under pairtree_root, but at
 the same level.
 
-Subcommand mknode, rmnode, and lsnode renamed mkbud, rmbud, and lsbud.
+Subcommand mknode, rmnode, and lsnode renamed mkid, rmid, and lsid.
 
 =head1 SEE ALSO
 

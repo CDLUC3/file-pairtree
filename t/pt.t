@@ -57,10 +57,10 @@ sub filval { my( $file, $value )=@_;	# $file must begin with >, <, or >>
 remake_td();
 my $x;
 
-$x = `$cmd -d $td mkbud abc`;
-is $?, 0, "status good on simple mkbud";
+$x = `$cmd -d $td mkid abc`;
+is $?, 0, "status good on simple mkid";
 
-like $x, qr|ab/c/|, "simple mkbud";
+like $x, qr|ab/c/|, "simple mkid";
 
 use File::Namaste;
 (undef, $x, undef) = File::Namaste::nam_get($td, 0);
@@ -83,33 +83,33 @@ chop $x;
 
 like $x, qr|no such file or dir|, "complaint of non-existent tree";
 
-$x = `$cmd -d $td mkbud prefixabc prefixdef prefixhigk`;
+$x = `$cmd -d $td mkid prefixabc prefixdef prefixhigk`;
 like $x, qr|abc.*def.*higk.$|s, "make 3 nodes at once, prefix stripped";
 
-$x = `$cmd --dummy lsbud prefixdef`;
+$x = `$cmd --dummy lsid prefixdef`;
 ok($? > 1, "status greater than 1 on bad option");
 
-$x = `$cmd -d $td lsbud prefixxyz prefixdef`;
-is $?>>8, 1, "status 1 on lsbud with at least one non-existent node";
+$x = `$cmd -d $td lsid prefixxyz prefixdef`;
+is $?>>8, 1, "status 1 on lsid with at least one non-existent node";
 
-$x = `$cmd -fd $td lsbud def`;
-is $?>>8, 2, "status 2 on lsbud of existing node, no prefix, but --force)";
+$x = `$cmd -fd $td lsid def`;
+is $?>>8, 2, "status 2 on lsid of existing node, no prefix, but --force)";
 
-$x = `$cmd -d $td lsbud def`;
-is $?, 0, "status good on lsbud of existing node, no prefix (no --force)";
+$x = `$cmd -d $td lsid def`;
+is $?, 0, "status good on lsid of existing node, no prefix (no --force)";
 
-$x = `$cmd -d $td lsbud prefixdef`;
-is $?, 0, "status good on lsbud of existing node (with prefix)";
+$x = `$cmd -d $td lsid prefixdef`;
+is $?, 0, "status good on lsid of existing node (with prefix)";
 
-$x = `$cmd -d $td rmbud prefixdef`;
-is $?, 0, "status good on rmbud of existing node (with prefix)";
+$x = `$cmd -d $td rmid prefixdef`;
+is $?, 0, "status good on rmid of existing node (with prefix)";
 
-$x = `$cmd -d $td rmbud prefixdummy`;
-is $?>>8, 1, "soft fail on rmbud of non-existing node (with prefix)";
+$x = `$cmd -d $td rmid prefixdummy`;
+is $?>>8, 1, "soft fail on rmid of non-existing node (with prefix)";
 
 remake_td();		# re-make temp dir
 
-$x = `$cmd -d $td mkbud abc abcd abcde def ghi jkl`;
+$x = `$cmd -d $td mkid abc abcd abcde def ghi jkl`;
 $x = `$cmd -d $td lstree`;
 like $x, qr/6 objects/, 'make and list 6 object tree, overlapping ids';
 

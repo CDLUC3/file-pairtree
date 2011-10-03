@@ -1,5 +1,3 @@
-# XXX change {mk,ls,rm}bud to {mk,ls,re}id
-
 package File::Pairtree;
 
 use 5.006;
@@ -18,7 +16,7 @@ our @ISA = qw(Exporter);
 our @EXPORT = qw();
 our @EXPORT_OK = qw(
 	id2ppath ppath2id s2ppchars id2pairpath pairpath2id
-	pt_lsbud pt_lstree pt_mkbud pt_mktree pt_rmbud
+	pt_lsid pt_lstree pt_mkid pt_mktree pt_rmid
 	pt_budstr get_prefix
 	$pfixtail
 	$pair $pairp1 $pairm1
@@ -265,7 +263,7 @@ sub get_prefix { my( $parent_dir )=@_;
 # return 0 on success, 1 on soft fail, >1 on hard fail
 # xxxxxxxxx get consistent on these return codes/croaks
 #
-sub pt_lsbud { my( $dir, $id, $r_opt )=@_;
+sub pt_lsid { my( $dir, $id, $r_opt )=@_;
 
 	$dir		or croak "no dir or empty dir";
 	$id		or croak "no id or empty id";
@@ -329,9 +327,6 @@ my $homily = "(pairpath end should be followed by only one thing -- " .
 # Returns the small hash { 'wanted' => $visitor, 'follow' => 1 } and a
 # subroutine $visit_over that can be called to summarize the visit.
 #
-
-# XXX change {mk,ls,rm}bud to {mk,ls,rm}id
-
 sub make_visitor { my( $r_opt )=@_;
 
 	my $om = $r_opt->{om} or
@@ -575,7 +570,7 @@ sub pt_budstr { my( $id, $bud_style )=@_;
 	return s2ppchars($id);
 }
 
-sub pt_mkbud { my( $dir, $id, $r_opt )=@_;
+sub pt_mkid { my( $dir, $id, $r_opt )=@_;
 
 	$dir		or croak "no dir or empty dir";
 	$id		or croak "no id or empty id";
@@ -597,7 +592,7 @@ sub pt_mkbud { my( $dir, $id, $r_opt )=@_;
 
 	-d $dir or			# need to create base directory
 		pt_mktree($dir, "", $r_opt) and		# if error
-		($$r_opt{msg} = "pt_mkbud: $$r_opt{msg}"),
+		($$r_opt{msg} = "pt_mkid: $$r_opt{msg}"),
 		return 1;		# return after adding our stamp
 	my $ppath = $parent_dir . id2ppath($id);
 	my $bud = $ppath . pt_budstr($id, $$r_opt{bud_style});
@@ -606,7 +601,7 @@ sub pt_mkbud { my( $dir, $id, $r_opt )=@_;
 	eval { $ret = mkpath($bud) };
 	$@		and croak "Couldn't create $bud: $@";
 	if ($ret == 0) {
-		croak "pt_mkbud: mkpath returned '0' for $bud"
+		croak "pt_mkid: mkpath returned '0' for $bud"
 			unless -e $bud;
 		$$r_opt{msg} = "error: $bud ($id) already exists\n";
 		return 0;
@@ -658,7 +653,7 @@ sub pt_mktree { my( $dir, $prefix, $r_opt )=@_;
 	return 0;
 }
 
-sub pt_rmbud { my( $dir, $id, $r_opt )=@_;
+sub pt_rmid { my( $dir, $id, $r_opt )=@_;
 
 	$dir		or croak "no dir or empty dir";
 	$id		or croak "no id or empty id";
@@ -863,10 +858,10 @@ File::Pairtree - routines to manage pairtrees
  ppath2id($path, $separator);  # if you want an alternate separator char
 
  pt_budstr();
- pt_mkbud();
+ pt_mkid();
  pt_mktree();
- pt_rmbud();
- pt_lsbud();
+ pt_rmid();
+ pt_lsid();
 
 =head1 DESCRIPTION
 
