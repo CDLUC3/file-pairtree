@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 our $VERSION;
-$VERSION = sprintf "%d.%02d", q$Name: Release-1-00 $ =~ /Release-(\d+)-(\d+)/;
+$VERSION = sprintf "%d.%02d", q$Name: Release-1-02 $ =~ /Release-(\d+)-(\d+)/;
 #$VERSION = sprintf "%s", q$Name: Release-v0.304.0$ =~ /Release-(v\d+\.\d+\.\d+)/;
 #our $NVERSION;			# pure numeric 2-part equivalent version
 #($NVERSION = $VERSION) =~ s/v(\d+\.\d+)\.\d+/$1/;
@@ -244,6 +244,9 @@ use File::Glob ':glob';		# standard use of module, which we need
 				# as vanilla glob won't match whitespace
 
 our $Win;			# whether we're running on Windows
+# xxx should probably test directly for symlink capacity
+defined($Win) or	# if we're on a Windows platform avoid -l
+	$Win = grep(/Win32|OS2/i, @File::Spec::ISA);
 
 my $pfixtail = 'pairtree_prefix';
 
@@ -501,10 +504,6 @@ sub pt_lstree { my( $tree, $r_opt, $r_visit_node, $r_wrapup )=@_;
 	#ref( $r_wrapup ||= \&pt_lstree_wrapup ) eq "CODE" or
 	#	croak "r_wrapup must reference a node-visiting function";
 
-	# xxx should probably test directly for symlink capacity
-	defined($Win) or	# if we're on a Windows platform avoid -l
-		$Win = grep(/Win32|OS2/i, @File::Spec::ISA);
-
 	$tree = fiso_dname($tree, $R);	# make sure we have descender
 	$$r_opt{parent_dir} ||= fiso_uname($tree);
 	$$r_opt{prefix} ||= get_prefix($$r_opt{prefix});
@@ -606,7 +605,7 @@ sub pt_mktree { my( $dir, $prefix, $r_opt )=@_;
 		return 1;
 	}
 
-	my $pxfile = $parent_dir . $pfixtail;
+	my $pxfile = File::Spec->catfile($parent_dir, $pfixtail);
 	my $msg = file_value("> $pxfile", $prefix)
 		if ($prefix);
 	if ($msg) {

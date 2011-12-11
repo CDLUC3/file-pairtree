@@ -17,7 +17,7 @@
 #     NAME => q[File::Pairtree]
 #     PL_FILES => {  }
 #     PM => { lib/File/Pairtree.pm=>q[blib/lib/File/Pairtree.pm] }
-#     PREREQ_PM => { Getopt::Long=>q[0], File::Glob=>q[0], Pod::Usage=>q[0], Carp=>q[0], File::Find=>q[0], File::Value=>q[1.00], File::Path=>q[0], File::Namaste=>q[v0.261.0], File::OM=>q[0.21] }
+#     PREREQ_PM => { Getopt::Long=>q[0], File::Glob=>q[0], Pod::Usage=>q[0], Carp=>q[0], File::Find=>q[0], File::Value=>q[1.01], File::Path=>q[0], File::Namaste=>q[1.01], File::OM=>q[0.21] }
 #     VERSION_FROM => q[VERSION]
 #     clean => { FILES=>q[File-Value-*] }
 #     dist => { COMPRESS=>q[gzip -9f], SUFFIX=>q[gz] }
@@ -59,11 +59,11 @@ DIRFILESEP = /
 DFSEP = $(DIRFILESEP)
 NAME = File::Pairtree
 NAME_SYM = File_Pairtree
-VERSION = 1.00
+VERSION = 1.02
 VERSION_MACRO = VERSION
-VERSION_SYM = 1_00
+VERSION_SYM = 1_02
 DEFINE_VERSION = -D$(VERSION_MACRO)=\"$(VERSION)\"
-XS_VERSION = 1.00
+XS_VERSION = 1.02
 XS_VERSION_MACRO = XS_VERSION
 XS_DEFINE_VERSION = -D$(XS_VERSION_MACRO)=\"$(XS_VERSION)\"
 INST_ARCHLIB = blib/arch
@@ -252,7 +252,7 @@ RCS_LABEL = rcs -Nv$(VERSION_SYM): -q
 DIST_CP = best
 DIST_DEFAULT = tardist
 DISTNAME = File-Pairtree
-DISTVNAME = File-Pairtree-1.00
+DISTVNAME = File-Pairtree-1.02
 
 
 # --- MakeMaker macro section:
@@ -493,7 +493,7 @@ metafile : create_distdir
 	$(NOECHO) $(ECHO) Generating META.yml
 	$(NOECHO) $(ECHO) '--- #YAML:1.0' > META_new.yml
 	$(NOECHO) $(ECHO) 'name:               File-Pairtree' >> META_new.yml
-	$(NOECHO) $(ECHO) 'version:            1.00' >> META_new.yml
+	$(NOECHO) $(ECHO) 'version:            1.02' >> META_new.yml
 	$(NOECHO) $(ECHO) 'abstract:           pt command and routines to manage pairtrees' >> META_new.yml
 	$(NOECHO) $(ECHO) 'author:' >> META_new.yml
 	$(NOECHO) $(ECHO) '    - John A. Kunze <jak@ucop.edu>' >> META_new.yml
@@ -505,10 +505,10 @@ metafile : create_distdir
 	$(NOECHO) $(ECHO) '    Carp:           0' >> META_new.yml
 	$(NOECHO) $(ECHO) '    File::Find:     0' >> META_new.yml
 	$(NOECHO) $(ECHO) '    File::Glob:     0' >> META_new.yml
-	$(NOECHO) $(ECHO) '    File::Namaste:  v0.261.0' >> META_new.yml
+	$(NOECHO) $(ECHO) '    File::Namaste:  1.01' >> META_new.yml
 	$(NOECHO) $(ECHO) '    File::OM:       0.21' >> META_new.yml
 	$(NOECHO) $(ECHO) '    File::Path:     0' >> META_new.yml
-	$(NOECHO) $(ECHO) '    File::Value:    1.00' >> META_new.yml
+	$(NOECHO) $(ECHO) '    File::Value:    1.01' >> META_new.yml
 	$(NOECHO) $(ECHO) '    Getopt::Long:   0' >> META_new.yml
 	$(NOECHO) $(ECHO) '    Pod::Usage:     0' >> META_new.yml
 	$(NOECHO) $(ECHO) 'no_index:' >> META_new.yml
@@ -810,7 +810,7 @@ testdb_static :: testdb_dynamic
 # --- MakeMaker ppd section:
 # Creates a PPD (Perl Package Description) for a binary distribution.
 ppd :
-	$(NOECHO) $(ECHO) '<SOFTPKG NAME="$(DISTNAME)" VERSION="1,00,0,0">' > $(DISTNAME).ppd
+	$(NOECHO) $(ECHO) '<SOFTPKG NAME="$(DISTNAME)" VERSION="1,02,0,0">' > $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '    <TITLE>$(DISTNAME)</TITLE>' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '    <ABSTRACT>pt command and routines to manage pairtrees</ABSTRACT>' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '    <AUTHOR>John A. Kunze &lt;jak@ucop.edu&gt;</AUTHOR>' >> $(DISTNAME).ppd
@@ -818,10 +818,10 @@ ppd :
 	$(NOECHO) $(ECHO) '        <DEPENDENCY NAME="Carp" VERSION="0,0,0,0" />' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '        <DEPENDENCY NAME="File-Find" VERSION="0,0,0,0" />' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '        <DEPENDENCY NAME="File-Glob" VERSION="0,0,0,0" />' >> $(DISTNAME).ppd
-	$(NOECHO) $(ECHO) '        <DEPENDENCY NAME="File-Namaste" VERSION="v0,261,0,0" />' >> $(DISTNAME).ppd
+	$(NOECHO) $(ECHO) '        <DEPENDENCY NAME="File-Namaste" VERSION="1,01,0,0" />' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '        <DEPENDENCY NAME="File-OM" VERSION="0,21,0,0" />' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '        <DEPENDENCY NAME="File-Path" VERSION="0,0,0,0" />' >> $(DISTNAME).ppd
-	$(NOECHO) $(ECHO) '        <DEPENDENCY NAME="File-Value" VERSION="1,00,0,0" />' >> $(DISTNAME).ppd
+	$(NOECHO) $(ECHO) '        <DEPENDENCY NAME="File-Value" VERSION="1,01,0,0" />' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '        <DEPENDENCY NAME="Getopt-Long" VERSION="0,0,0,0" />' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '        <DEPENDENCY NAME="Pod-Usage" VERSION="0,0,0,0" />' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '        <OS NAME="$(OSNAME)" />' >> $(DISTNAME).ppd
