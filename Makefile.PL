@@ -16,7 +16,8 @@ WriteMakefile(
 	'lib/File/Pairtree.pm'	=> 'blib/lib/File/Pairtree.pm'
     },
     PL_FILES            => {},
-# xxx do we really need Carp?
+
+    # xxx do we really need Carp?
     PREREQ_PM         => {
 	'Carp'		=> '0',
 	'Pod::Usage'	=> '0',
